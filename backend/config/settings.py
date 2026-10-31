@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     # Local
     "apps.core",
     "apps.support",
+    "apps.security",
 ]
 
 MIDDLEWARE = [
@@ -92,3 +93,11 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+# Security thresholds (UAH and counts). Policy reads these; nothing is hardcoded there.
+AUTO_REFUND_LIMIT = env.int("AUTO_REFUND_LIMIT", default=50)
+HARD_REFUND_LIMIT = env.int("HARD_REFUND_LIMIT", default=1000)
+RISKY_ACTIONS_PER_HOUR = env.int("RISKY_ACTIONS_PER_HOUR", default=5)
+IDEMPOTENCY_WINDOW_SEC = env.int("IDEMPOTENCY_WINDOW_SEC", default=120)
+POLICY_REVIEW_HIGH_RISK = env.bool("POLICY_REVIEW_HIGH_RISK", default=True)
+POLICY_REVIEW_VIP = env.bool("POLICY_REVIEW_VIP", default=True)
