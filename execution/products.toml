@@ -1,0 +1,12 @@
+# Products connected to this execution server. Each one hands us an API, an API key (read from
+# the named environment variable, never stored here) and its text context.
+
+[cloudbox]
+base_url = "http://127.0.0.1:9201"
+api_key_env = "CLOUDBOX_API_KEY"
+context = "../mocks/cloudbox/context.md"
+
+[shopx]
+base_url = "http://127.0.0.1:9202"
+api_key_env = "SHOPX_API_KEY"
+context = "../mocks/shopx/context.md"
