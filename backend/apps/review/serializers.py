@@ -64,10 +64,21 @@ class CustomerChatSerializer(serializers.ModelSerializer):
     """What a customer may see: the conversation, never the trace or review internals."""
 
     messages = MessageSerializer(many=True)
+    pendingConfirmation = serializers.SerializerMethodField()
 
     class Meta:
         model = Chat
-        fields = ["id", "status", "messages"]
+        fields = ["id", "status", "messages", "pendingConfirmation"]
+
+    def get_pendingConfirmation(self, chat):  # noqa: N802 - camelCase for the frontend
+        # An action only this customer's own button may confirm (see the accounts API).
+        from django.conf import settings
+
+        if not settings.ORCHESTRATOR_ENABLED or chat.customer is None:
+            return None
+        from apps.orchestrator.pipeline import pending_confirmation
+
+        return pending_confirmation(chat.customer)
 
 
 class ReplyInput(serializers.Serializer):

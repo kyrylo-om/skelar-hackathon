@@ -77,7 +77,7 @@ def decide_review(review_id: int, operator, decision: str, note: str = "") -> Re
 
     if decision == ReviewItem.Status.APPROVED:
         # A failure here rolls the transaction back and leaves the review pending.
-        ports.execute(review.action, review.params)
+        ports.execute(review.action, review.params, review.chat.customer)
 
     review.status = decision
     review.decided_by = operator

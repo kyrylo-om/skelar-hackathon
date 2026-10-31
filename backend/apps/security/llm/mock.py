@@ -57,12 +57,41 @@ def _triage(user: str) -> dict:
 
 
 def _actor(user: str) -> dict:
+    """Plans from the CONTEXT the orchestrator supplies: triage, facts and allowed actions."""
     context = _json_after(user, "CONTEXT")
     intent = (context.get("triage") or {}).get("intent", "unclear")
+    allowed = {a["name"] for a in context.get("allowed_actions", [])}
+    facts = context.get("facts") or {}
+
+    def plan(name, params=None, why="mock"):
+        if name not in allowed:
+            name, params = "escalate_to_human", {"reason": "mock: no allowed action fits"}
+        action = {"name": name, "params": params or {}, "reasoning": why}
+        return {"intent": intent, "actions": [action], "needs_clarification": None}
+
+    def ask(question):
+        return {"intent": intent, "actions": [], "needs_clarification": question}
+
     if intent in ("unclear", "smalltalk", "out_of_scope"):
-        return {"actions": [], "needs_clarification": "Підкажіть, будь ласка, що саме потрібно?"}
-    action = {"name": "escalate_to_human", "params": {"reason": "mock"}, "reasoning": "mock"}
-    return {"intent": intent, "actions": [action], "needs_clarification": None}
+        return ask("Підкажіть, будь ласка, що саме потрібно: проблема з оплатою чи з підпискою?")
+    if intent == "activation_issue":
+        pending = [
+            p
+            for p in facts.get("payments", [])
+            if p.get("status") == "successful" and not p.get("applied")
+        ]
+        if len(pending) == 1:
+            return plan(
+                "sync_subscription", {"payment_id": pending[0]["id"]}, "one unapplied payment"
+            )
+        if len(pending) > 1:
+            return ask("Бачу кілька оплат. Яка саме з них не активувала тариф?")
+        return plan("escalate_to_human", {"reason": "no unapplied payment found"})
+    if intent == "subscription_status":
+        return plan("get_subscription")
+    if intent == "cancel_renewal":
+        return plan("cancel_auto_renewal")
+    return plan("escalate_to_human", {"reason": f"mock: {intent}"})
 
 
 def _critic(user: str) -> dict:
