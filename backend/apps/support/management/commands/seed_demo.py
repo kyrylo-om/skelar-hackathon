@@ -35,6 +35,9 @@ class Command(BaseCommand):
             ("paid_plus", "Free", False),
             ("active_pro", "Pro", False),
             ("refund_review", "Plus", False),
+            ("plus_manual", "Plus", False),
+            ("free_user", "Free", False),
+            ("pro_user", "Pro", False),
             ("operator", None, True),
         ):
             user, created = get_user_model().objects.get_or_create(
@@ -69,6 +72,6 @@ class Command(BaseCommand):
             )
         self.stdout.write(
             self.style.SUCCESS(
-                "Synthetic users: paid_plus, active_pro, refund_review, operator. Existing passwords/state preserved."
+                "Synthetic users: paid_plus, active_pro, refund_review, plus_manual, free_user, pro_user, operator. Existing passwords/state preserved."
             )
         )

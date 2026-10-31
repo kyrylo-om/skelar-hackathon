@@ -3,7 +3,7 @@ import { ApiError, api, apiErrorMessage } from './api/client'
 
 export default function Login({ role, onLogin }) {
   const [username, setUsername] = useState('operator')
-  const [password, setPassword] = useState('operator123')
+  const [password, setPassword] = useState('support-demo-2026')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 

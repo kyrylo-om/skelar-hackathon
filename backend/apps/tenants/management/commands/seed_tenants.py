@@ -10,6 +10,9 @@ MAPPINGS = [
     ("paid_plus", "cloudbox", "c-101"),
     ("active_pro", "cloudbox", "c-102"),
     ("refund_review", "cloudbox", "c-103"),
+    ("plus_manual", "cloudbox", "c-104"),
+    ("free_user", "cloudbox", "c-105"),
+    ("pro_user", "cloudbox", "c-106"),
     ("shop_demo", "shopx", "s-201"),
 ]
 

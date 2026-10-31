@@ -4,7 +4,7 @@ Django + React template.
 
 | Part       | Stack                                    |
 |------------|------------------------------------------|
-| `backend/` | Django 6, Django REST Framework, SQLite  |
+| `backend/` | Django 5.2, Django REST Framework, SQLite |
 | `frontend/`| React 19, TypeScript, Vite, Vitest       |
 
 ## Getting started
@@ -33,6 +33,9 @@ npm run dev
 - App: http://localhost:5173
 - API: http://localhost:5173/api/ (proxied to Django on :8000)
 - Admin: http://localhost:5173/admin/ (create a user with `python manage.py createsuperuser`)
+
+For the local demo, `scripts/start-mcp-demo.ps1` runs migrations and creates these accounts with
+the password `support-demo-2026`: `paid_plus`, `active_pro`, `refund_review`, and `operator`.
 
 Vite proxies `/api`, `/admin` and `/static` to `BACKEND_URL` (default `http://localhost:8000`),
 so the frontend and API share an origin and session auth + CSRF work without CORS.

@@ -1,4 +1,5 @@
-Django==6.1.2
+# Django 5.2 supports the project's installed Python 3.11 runtime.
+Django==5.2.10
 djangorestframework==3.18.3
 django-cors-headers==4.9.0
 django-environ==0.14.0
