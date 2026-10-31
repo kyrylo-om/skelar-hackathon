@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.review",
     "apps.security",
     "apps.orchestrator",
+    "apps.widget",
 ]
 
 MIDDLEWARE = [
@@ -148,3 +149,7 @@ EXECUTION_CUSTOMERS = env.dict(
     "EXECUTION_CUSTOMERS",
     default={"paid_plus": "c-101", "active_pro": "c-102", "refund_review": "c-103"},
 )
+
+# The embeddable widget (apps.widget): each product signs its customers' widget tokens with its own
+# secret, never with EXECUTION_SECRET. Format: WIDGET_SECRETS=cloudbox=...,shopx=...
+WIDGET_SECRETS = env.dict("WIDGET_SECRETS", default={})
