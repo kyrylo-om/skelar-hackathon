@@ -39,6 +39,9 @@ class Escalation:
     max_rejections: int = 2
     confidence_threshold: float = 0.6
     legal_terms: tuple = ("суд", "прокуратур", "lawsuit", "chargeback")
+    # Explicit requests that reach a person even if the model is down or cannot classify them.
+    human_terms: tuple = ("людин", "оператор", "менеджер", "спеціаліст", "human", "real person")
+    refund_terms: tuple = ("поверн", "рефанд", "refund", "гроші назад")
 
 
 @dataclass(frozen=True)
@@ -107,11 +110,12 @@ CLOUDBOX = Manifest(
         "cancel_renewal": IntentSpec(
             "cancel_renewal", ("cancel_auto_renewal", "escalate_to_human")
         ),
-        "refund": IntentSpec("refund", ("escalate_to_human",)),
-        "double_charge": IntentSpec("double_charge", ("escalate_to_human",)),
-        "human_request": IntentSpec("human_request", ("escalate_to_human",)),
+        "refund": IntentSpec("refund", ("escalate_to_human",), always_human=True),
+        "double_charge": IntentSpec("double_charge", ("escalate_to_human",), always_human=True),
+        # A request for a person never needs planning: it goes straight to the queue.
+        "human_request": IntentSpec("human_request", ("escalate_to_human",), always_human=True),
         "info_question": IntentSpec("info_question", ("get_subscription", "escalate_to_human")),
-        "plan_change": IntentSpec("plan_change", ("escalate_to_human",)),
+        "plan_change": IntentSpec("plan_change", ("escalate_to_human",), always_human=True),
         "legal_threat": IntentSpec("legal_threat", ("escalate_to_human",), always_human=True),
         "account_deletion": IntentSpec(
             "account_deletion", ("escalate_to_human",), always_human=True

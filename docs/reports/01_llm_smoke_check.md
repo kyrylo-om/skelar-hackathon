@@ -9,11 +9,11 @@ Model: deepseek-flash at https://api.deepseek.com
 
 role       | valid JSON |    time | verdict
 --------------------------------------------------
-guard      | True       |    3.2s | attack
+guard      | True       |    4.2s | attack
 triage     | True       |    1.9s | activation_issue
-actor      | True       |    1.4s | plan:1
-critic     | True       |    1.3s | reject
-responder  | True       |    2.5s | reply
+actor      | True       |    1.6s | plan:1
+critic     | True       |    3.3s | reject
+responder  | True       |    1.9s | reply
 ```
 
 Що це означає:

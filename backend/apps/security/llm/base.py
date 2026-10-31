@@ -9,6 +9,7 @@ The API key is read from settings only to build the client. It is never logged o
 
 import json
 import logging
+import math
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -38,7 +39,7 @@ def message_budget():
     if _budget.get() is not None:
         yield
         return
-    token = _budget.set([0])
+    token = _budget.set([0, time.monotonic()])  # [calls made, start of the message]
     try:
         yield
     finally:
@@ -51,8 +52,19 @@ def _take_call() -> bool:
         return True
     if counter[0] >= settings.LLM_MAX_CALLS_PER_MESSAGE:
         return False
+    if time.monotonic() - counter[1] >= settings.LLM_TOTAL_DEADLINE_SEC:
+        return False  # the whole message has used up its time
     counter[0] += 1
     return True
+
+
+def _call_timeout() -> float:
+    """Per-call timeout, never longer than what is left of the message's overall deadline."""
+    counter = _budget.get()
+    if counter is None:
+        return settings.LLM_TIMEOUT
+    left = settings.LLM_TOTAL_DEADLINE_SEC - (time.monotonic() - counter[1])
+    return max(1.0, min(settings.LLM_TIMEOUT, left))
 
 
 _TYPES = {
@@ -69,8 +81,8 @@ def _type_ok(value, allowed) -> bool:
     names = allowed if isinstance(allowed, list) else [allowed]
     for name in names:
         expected = _TYPES[name]
-        if name == "number" and isinstance(value, bool):
-            continue
+        if name == "number" and (isinstance(value, bool) or not math.isfinite(value)):
+            continue  # booleans, NaN and infinity are not numbers here
         if isinstance(value, expected):
             return True
     return False
@@ -91,6 +103,10 @@ def validate(data, schema: dict) -> bool:
             return False
         if "enum" in rule and value not in rule["enum"]:
             return False
+        if "minimum" in rule and value < rule["minimum"]:
+            return False
+        if "maximum" in rule and value > rule["maximum"]:
+            return False
     return True
 
 
@@ -100,7 +116,7 @@ def _deepseek_call(role: str, system: str, user: str) -> str:
     client = openai.OpenAI(
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
-        timeout=settings.LLM_TIMEOUT,
+        timeout=_call_timeout(),
         max_retries=0,  # retries are ours, so they are counted
     )
     try:

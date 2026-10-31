@@ -121,6 +121,8 @@ LLM_API_KEY = env("LLM_API_KEY", default="")
 LLM_BASE_URL = env("LLM_BASE_URL", default="https://api.deepseek.com")
 LLM_MODEL = env("LLM_MODEL", default="deepseek-chat")
 LLM_TIMEOUT = env.int("LLM_TIMEOUT", default=20)
+# One customer message may spend at most this long on model calls in total.
+LLM_TOTAL_DEADLINE_SEC = env.int("LLM_TOTAL_DEADLINE_SEC", default=30)
 LLM_MAX_CALLS_PER_MESSAGE = env.int("LLM_MAX_CALLS_PER_MESSAGE", default=8)
 LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=1500)
 # Tests must never reach the network, whatever .env says.

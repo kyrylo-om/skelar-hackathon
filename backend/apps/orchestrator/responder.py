@@ -35,7 +35,25 @@ FORBIDDEN = (
     "гарантуємо",
     "обіцяємо",
     "компенсу",
+    # The assistant never refunds money by itself: a human decides, so no reply may say it happened.
+    "повернуто",
+    "повернули",
+    "повернено",
+    "кошти повернен",
+    "refunded",
 )
+# Claims about what was done must match what was done. While an action only waits for the
+# customer's button, it must not be reported as finished; after a failure, nothing as success.
+WAITING_CLAIMS = (
+    "вимкнено",
+    "вимкнув",
+    "скасовано",
+    "скасував",
+    "disabled",
+    "cancelled",
+    "canceled",
+)
+FAILED_CLAIMS = ("успішно", "активовано", "виконано", "зараховано", "вимкнено", "скасовано")
 MAX_LENGTH = 600
 # Decisions where the customer's own words help the model answer; a refusal never gets them.
 WITH_MESSAGE = ("execute", "clarify", "review")
@@ -87,17 +105,23 @@ def _digits(text: str) -> set[str]:
     return set(re.findall(r"\d+", text))
 
 
-def reply_is_safe(backing: str, reply: str) -> bool:
-    """A model reply is used only if it is short, clean, and every number in it is backed.
+def reply_is_safe(backing: str, reply: str, outcomes: list[ActionOutcome] = ()) -> bool:
+    """A model reply is used only if it is short, clean, backed by facts and true to the results.
 
     `backing` is everything the reply may legitimately draw numbers from: the customer's facts,
     the action results and the draft. Dates may be reworded ("2026-11-29" to "29.11.2026"), but a
-    digit group that appears nowhere in the backing is an invention.
+    digit group that appears nowhere in the backing is an invention, and so is a claim of
+    something the results do not show (a refund, an action finished while it still waits for the
+    customer's button, success after a failure).
     """
     lowered = reply.lower()
     if not reply.strip() or len(reply) > MAX_LENGTH:
         return False
     if any(word in lowered for word in FORBIDDEN):
+        return False
+    if any(o.status == AWAITING for o in outcomes) and any(w in lowered for w in WAITING_CLAIMS):
+        return False
+    if any(o.status == FAILED for o in outcomes) and any(w in lowered for w in FAILED_CLAIMS):
         return False
     return _digits(reply) <= _digits(backing)
 
@@ -133,4 +157,4 @@ def compose(
     if answer.get("_fallback"):
         return draft
     backing = draft + json.dumps(context, ensure_ascii=False, default=str)
-    return answer["text"] if reply_is_safe(backing, answer["text"]) else draft
+    return answer["text"] if reply_is_safe(backing, answer["text"], outcomes) else draft

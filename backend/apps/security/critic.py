@@ -19,6 +19,9 @@ def review_plan(message: str, plan: dict, ctx: dict | None = None) -> CriticResu
     context = {
         # The Critic must see the same facts the plan was built from, or it cannot check them.
         "facts": ctx.get("facts"),
+        # The server's own view of this customer's payments and subscriptions.
+        "payments": ctx.get("payments"),
+        "subscriptions": ctx.get("subscriptions"),
         "current_order": ctx.get("current_order"),
         "pending_action": ctx.get("pending_action"),
         "retention_offered": ctx.get("retention_offered", False),

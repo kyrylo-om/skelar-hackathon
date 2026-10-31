@@ -5,9 +5,10 @@
 
 | Пакет | Кількість і час | Результат |
 |---|---|---|
-| `apps.security` | 90 tests in 0.128s | OK |
-| `apps.orchestrator` | 66 tests in 29.522s | OK |
-| `apps.review` | 18 tests in 3.029s | OK |
+| `apps.security` | 90 tests in 0.127s | OK |
+| `apps.orchestrator` | 88 tests in 37.875s | OK |
+| `apps.review` | 18 tests in 3.049s | OK |
+| `scripts/audit_agent_contracts.py (офлайн)` | 35 tests in 0.153s | OK |
 | frontend (vitest) | 10 | OK |
 
 Додатково: `ruff check` і `ruff format --check` без зауважень для `apps/security`, `apps/orchestrator`, `apps/review`,
