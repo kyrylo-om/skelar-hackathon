@@ -5,9 +5,9 @@ from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.support import services
-from apps.support.models import Chat, ReviewItem
-from apps.support.permissions import OPERATOR_GROUP
+from apps.review import services
+from apps.review.models import Chat, ReviewItem
+from apps.review.permissions import OPERATOR_GROUP
 
 # Demo data only. Messages are (role, text, minutes_ago); trace is (agent, verdict, detail).
 CHATS = [

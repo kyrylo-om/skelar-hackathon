@@ -24,7 +24,7 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local
     "apps.core",
-    "apps.support",
+    "apps.review",
     "apps.security",
 ]
 

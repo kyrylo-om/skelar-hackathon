@@ -6,9 +6,9 @@ from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.support import ports, services
-from apps.support.models import AuditLog, Chat, ReviewItem
-from apps.support.permissions import OPERATOR_GROUP
+from apps.review import ports, services
+from apps.review.models import AuditLog, Chat, ReviewItem
+from apps.review.permissions import OPERATOR_GROUP
 
 PASSWORD = "test-pass-123"
 
