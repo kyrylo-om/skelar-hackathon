@@ -129,10 +129,18 @@ Gate: будь-який `deny` дає `block`; будь-який `needs_review` 
 
 ## 4. Порядок реалізації (що вже є в коді)
 
-Є в `backend/apps/security`: `guard.py`, `critic.py`, `policy.py`, `gate.py`, `llm_stub.py`, `contracts.py`.
-Немає: Triage, Actor, Responder, режим `after_human_approval`, маніфест (реєстр дій зараз локальний словник
-у `policy.py`), добові сукупні ліміти, перевірка `payment_confirmed`. Усе це описано в наступних файлах як цільовий
-дизайн і позначене **[узгодити]**, де відрізняється від поточного коду.
+Станом на 2026-10-31 реалізовано (`backend/apps/security`, `backend/apps/orchestrator`, `backend/apps/review`):
+- **Guard, Critic, Policy, Gate** (`gate_plan` і `screen_input`), LLM-адаптер з mock-режимом і DeepSeek, `router.py`
+  з промптами для п'яти ролей (Guard, Triage, Actor, Critic, Responder).
+- **Оркестратор** (`pipeline.py`): Triage, Actor, Responder підключені до чату клієнта, перевірка плану
+  (`plan.py`), шлюз до продукту (`gateway.py`), режим `after_human_approval`, добовий ліміт повернень, перевірка
+  підтвердженого платежу, історія розмови для агентів, загальний дедлайн 30 с на повідомлення.
+- **Tenant Agent** (`apps/tenants`, [11_TENANT_AGENT.md](11_TENANT_AGENT.md)): цикл читання API підключених продуктів,
+  декларативні правила безпеки `manifest.yaml` (CloudBox, ShopX), журнал `ApiCall`, виконання дій через execution server.
+- Детальний опис: [10_ORCHESTRATOR.md](10_ORCHESTRATOR.md).
+
+Ще немає: окремі політики-файли `plans/billing/cancellation/refunds`, QA-метрики. Те, що описано в
+наступних файлах і відрізняється від коду, позначене **[узгодити]**.
 
 ## 5. Індекс
 
@@ -147,6 +155,8 @@ Gate: будь-який `deny` дає `block`; будь-який `needs_review` 
 | [07_HUMAN_REVIEW.md](07_HUMAN_REVIEW.md) | Черга людини |
 | [08_MANIFEST.md](08_MANIFEST.md) | Маніфест tenant-а |
 | [09_ATTACKS.md](09_ATTACKS.md) | Каталог атак |
+| [10_ORCHESTRATOR.md](10_ORCHESTRATOR.md) | Оркестратор конвеєра |
+| [11_TENANT_AGENT.md](11_TENANT_AGENT.md) | Підключення продуктів (Tenant Agent) |
 
 ## 6. Відкриті питання
 

@@ -1,7 +1,8 @@
-"""Seam between human review and the actions module.
+"""Seam between human review and the rest of the system.
 
-The review code calls `execute` after an operator approves an action. The real
-implementation lives with the policy/actions work and replaces this stub.
+`execute` runs an action after an operator approved it, and `run_pipeline` handles a new customer
+message. Both hand over to the orchestrator when ORCHESTRATOR_ENABLED is on; with it off the
+chat simply passes every message to a human.
 """
 
 
@@ -9,16 +10,27 @@ class ExecutionError(Exception):
     """The action could not be performed; the review must stay pending."""
 
 
-def execute(action: str, params: dict) -> None:
-    return None
+def execute(action: str, params: dict, customer=None) -> None:
+    """Run an action a human approved. The orchestrator re-checks Policy first, then acts."""
+    from django.conf import settings
+
+    if settings.ORCHESTRATOR_ENABLED and customer is not None:
+        from apps.orchestrator.pipeline import execute_approved
+
+        execute_approved(customer, action, params)
 
 
 def run_pipeline(chat, message) -> None:
-    """Handle a new customer message. Replaced by the agent pipeline.
+    """Handle a new customer message; without the orchestrator, hand it to a human."""
+    from django.conf import settings
 
-    Until it exists, hand the conversation to a human so nothing is lost.
-    """
     from . import services
+
+    if settings.ORCHESTRATOR_ENABLED:
+        from apps.orchestrator.pipeline import handle_customer_message
+
+        handle_customer_message(chat, message)
+        return
 
     services.add_message(
         chat,

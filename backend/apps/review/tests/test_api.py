@@ -3,7 +3,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.review import ports, services
@@ -90,7 +90,7 @@ class SupportApiTests(TestCase):
         with mock.patch.object(ports, "execute") as execute:
             response = self.decide("approved")
         assert response.status_code == 200
-        execute.assert_called_once_with("refund", {"amount": 240})
+        execute.assert_called_once_with("refund", {"amount": 240}, None)
         self.chat.refresh_from_db()
         self.review.refresh_from_db()
         assert self.chat.status == Chat.Status.RESOLVED
@@ -131,6 +131,7 @@ class SupportApiTests(TestCase):
         assert self.decide("maybe").status_code == 400
 
 
+@override_settings(ORCHESTRATOR_ENABLED=False)
 class CustomerChatTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -178,7 +179,7 @@ class CustomerChatTests(TestCase):
     def test_customer_response_hides_internals(self):
         self.client.force_login(self.customer)
         data = self.post_json("my-message", {"text": "привіт"}).json()
-        assert set(data) == {"id", "status", "messages"}
+        assert set(data) == {"id", "status", "messages", "pendingConfirmation"}
 
     def test_customer_cannot_read_operator_endpoints(self):
         self.client.force_login(self.customer)

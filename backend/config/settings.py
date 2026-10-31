@@ -29,6 +29,9 @@ INSTALLED_APPS = [
     "apps.support",
     "apps.review",
     "apps.security",
+    "apps.orchestrator",
+    "apps.tenants",
+    "evals",
 ]
 
 MIDDLEWARE = [
@@ -108,6 +111,7 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Security thresholds (UAH and counts). Policy reads these; nothing is hardcoded there.
 AUTO_REFUND_LIMIT = env.int("AUTO_REFUND_LIMIT", default=50)
 HARD_REFUND_LIMIT = env.int("HARD_REFUND_LIMIT", default=1000)
+DAILY_REFUND_LIMIT = env.int("DAILY_REFUND_LIMIT", default=2000)
 RISKY_ACTIONS_PER_HOUR = env.int("RISKY_ACTIONS_PER_HOUR", default=5)
 IDEMPOTENCY_WINDOW_SEC = env.int("IDEMPOTENCY_WINDOW_SEC", default=120)
 POLICY_REVIEW_HIGH_RISK = env.bool("POLICY_REVIEW_HIGH_RISK", default=True)
@@ -119,8 +123,32 @@ LLM_API_KEY = env("LLM_API_KEY", default="")
 LLM_BASE_URL = env("LLM_BASE_URL", default="https://api.deepseek.com")
 LLM_MODEL = env("LLM_MODEL", default="deepseek-chat")
 LLM_TIMEOUT = env.int("LLM_TIMEOUT", default=20)
-LLM_MAX_CALLS_PER_MESSAGE = env.int("LLM_MAX_CALLS_PER_MESSAGE", default=6)
-LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=800)
+# One customer message may spend at most this long on model calls in total.
+LLM_TOTAL_DEADLINE_SEC = env.int("LLM_TOTAL_DEADLINE_SEC", default=30)
+LLM_MAX_CALLS_PER_MESSAGE = env.int("LLM_MAX_CALLS_PER_MESSAGE", default=8)
+LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=1500)
 # Tests must never reach the network, whatever .env says.
 if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
     LLM_PROVIDER = "mock"
+
+# The agent pipeline behind the customer chat. Off: every message goes straight to a human.
+ORCHESTRATOR_ENABLED = env.bool("ORCHESTRATOR_ENABLED", default=True)
+# The Responder LLM writes every reply from the customer's facts; the manifest text is the fallback.
+ORCHESTRATOR_LLM_RESPONDER = env.bool("ORCHESTRATOR_LLM_RESPONDER", default=True)
+
+# Connected products: our rules per product live in TENANTS_DIR/<tenant>/manifest.yaml.
+TENANTS_DIR = BASE_DIR / "tenants"
+TENANT_AGENT_MAX_STEPS = env.int("TENANT_AGENT_MAX_STEPS", default=6)
+# The execution server (MCP) every product call goes through, and the secrets it shares with us.
+ORCHESTRATOR_GATEWAY = env("ORCHESTRATOR_GATEWAY", default="dev")
+EXECUTION_URL = env("EXECUTION_URL", default="http://127.0.0.1:9000")
+EXECUTION_TENANT = env("EXECUTION_TENANT", default="cloudbox")  # its key in products.toml
+EXECUTION_SECRET = env("EXECUTION_SECRET", default="")  # signs customer tokens; never logged
+EXECUTION_SERVICE_KEY = env("EXECUTION_SERVICE_KEY", default="")
+EXECUTION_REPO_PATH = env("EXECUTION_REPO_PATH", default=str(BASE_DIR.parent))
+# Our username -> the customer's id in the product. Defaults map the seed_demo accounts onto the
+# cloudbox mock (same situations: unapplied payment, Pro with renewal, double charge).
+EXECUTION_CUSTOMERS = env.dict(
+    "EXECUTION_CUSTOMERS",
+    default={"paid_plus": "c-101", "active_pro": "c-102", "refund_review": "c-103"},
+)

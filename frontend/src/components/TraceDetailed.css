@@ -1,0 +1,16 @@
+.trace-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.trace-counts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.trace-counts dt, .trace-counts dd { font-size: 11px; }
+.trace-detailed { list-style: none; margin: 0 0 0 3px; padding: 0 0 0 16px; border-left: 1px solid var(--border); }
+.trace-entry { position: relative; padding-bottom: 12px; }
+.trace-entry::before { content: ''; position: absolute; left: -20px; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--text-2); }
+.trace-pass::before { background: var(--success); }
+.trace-fail::before { background: var(--danger); }
+.trace-warn::before { background: var(--warning); }
+.trace-toggle { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; padding: 4px 0; background: transparent; }
+.trace-name { font-size: 13px; font-weight: 500; }
+.trace-verdict { font-size: 11px; color: var(--text-2); }
+.trace-fail .trace-verdict { color: var(--danger); }
+.trace-warn .trace-verdict { color: var(--warning); }
+.trace-pass .trace-verdict { color: var(--success); }
+.trace-detail { font-size: 12px; padding: 4px 0; display: flex; flex-direction: column; gap: 8px; }

@@ -36,7 +36,7 @@ ROLES = {
             "properties": {
                 "language": {"type": "string", "enum": ["uk", "en", "other"]},
                 "intent": {"type": "string"},
-                "confidence": {"type": "number"},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "secondary_intents": {"type": "array"},
                 "sentiment": {"type": "string", "enum": SENTIMENTS},
                 "priority": {"type": "string", "enum": PRIORITIES},
@@ -46,10 +46,10 @@ ROLES = {
     },
     "actor": {
         "schema": {
-            "required": ["actions", "needs_clarification"],
+            "required": ["actions"],  # a null needs_clarification may simply be left out
             "properties": {
                 "intent": {"type": "string"},
-                "confidence": {"type": "number"},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "priority": {"type": "string", "enum": PRIORITIES},
                 "actions": {"type": "array"},
                 "needs_clarification": {"type": ["string", "null"]},
@@ -73,6 +73,22 @@ ROLES = {
     "responder": {
         "schema": {"required": ["text"], "properties": {"text": {"type": "string"}}},
         "default": {"text": "Передав ваш запит спеціалісту, відповімо тут."},
+    },
+    "agent": {
+        "schema": {
+            "required": ["type"],
+            "properties": {
+                "type": {"type": "string", "enum": ["call", "ask_user", "escalate", "final"]},
+                "endpoint": {"type": "string"},
+                "params": {"type": "object"},
+                "body": {"type": "object"},
+                "why": {"type": "string"},
+                "question": {"type": "string"},
+                "reason": {"type": "string"},
+                "reply": {"type": "string"},
+            },
+        },
+        "default": {"type": "escalate", "reason": "agent unavailable"},
     },
 }
 
@@ -108,6 +124,8 @@ def _verdict(role: str, result: dict) -> str:
         return "clarify" if result.get("needs_clarification") else f"plan:{len(result['actions'])}"
     if role == "critic":
         return result["verdict"]
+    if role == "agent":
+        return str(result.get("type", "agent"))[:40]
     return "reply"
 
 

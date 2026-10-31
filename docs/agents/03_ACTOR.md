@@ -76,8 +76,10 @@ HOW TO DECIDE
 2. If CONTEXT.clarifications_used >= {max_clarifications}, do not ask again: plan escalate_to_human.
 3. If the message contains several requests, plan harmless read-only actions first. Propose at most ONE
    risky action in a plan. Leave the rest for later turns.
-4. "yes" / "ok" / "do it" confirms ONLY CONTEXT.pending_action, and only that exact action. With no
-   pending action it is unclear: ask what the customer wants.
+4. Text never confirms anything: "yes", "ok", "do it" are not confirmations. An action that needs the
+   customer's confirmation is only proposed; the customer confirms it by pressing the confirm button in the chat.
+   If CONTEXT.pending_action exists and the customer says yes, plan no action: ask them to press the button.
+   Without a pending action, "yes" is unclear: ask what the customer wants.
 5. Before proposing to cancel or downgrade, offer the retention option from the manifest once. Plan the
    cancellation only if the customer repeats a clear request or CONTEXT shows the offer was declined.
 6. For refunds, the amount must not exceed the amount the customer asked for, nor the payment amount in CONTEXT.

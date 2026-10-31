@@ -9,10 +9,12 @@ export default function Login({ role, onLogin }) {
 
   const submit = async (e) => {
     e.preventDefault()
+    if (busy) return
     setBusy(true)
     setError('')
     try {
-      onLogin(await api.post('/auth/login/', { username, password }))
+      await api.get('/auth/csrf/', { signal: AbortSignal.timeout(10000) })
+      onLogin(await api.post('/auth/login/', { username, password }, { signal: AbortSignal.timeout(15000) }))
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 429
@@ -27,22 +29,24 @@ export default function Login({ role, onLogin }) {
   return (
     <form className="login" onSubmit={submit}>
       <h2>{role === 'operator' ? 'Вхід для менеджерів' : 'Вхід для клієнтів'}</h2>
-      <input
+      <label>Логін<input
         placeholder="Логін"
         autoComplete="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         autoFocus
-      />
-      <input
+        required
+      /></label>
+      <label>Пароль<input
         type="password"
         placeholder="Пароль"
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-      />
-      {error && <div className="tag bad">{error}</div>}
-      <button disabled={busy || !username || !password}>Увійти</button>
+        required
+      /></label>
+      {error && <div className="notice error" role="alert">{error}</div>}
+      <button className="primary" disabled={busy || !username || !password}>{busy ? 'Вхід…' : 'Увійти'}</button>
     </form>
   )
 }

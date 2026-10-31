@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
@@ -80,6 +81,10 @@ def messages(request, conversation_id):
 @api_view(["POST"])
 def confirm(request, action_id):
     validate(EmptyInput, request)
+    if settings.ORCHESTRATOR_GATEWAY == "mcp":  # the action lives in an external product
+        from apps.orchestrator.mcp_gateway import confirm as confirm_product_action
+
+        return Response(confirm_product_action(request.user, action_id))
     action, sub, changed = services.confirm_cancellation(request.user, action_id)
     return Response(
         {

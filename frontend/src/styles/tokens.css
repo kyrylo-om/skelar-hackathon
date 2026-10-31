@@ -1,0 +1,17 @@
+:root {
+  color-scheme: light;
+  --bg: #FFFFFF;
+  --bg-panel: #FAFAFA;
+  --bg-hover: #F5F5F5;
+  --border: #E8E8E8;
+  --control-border: #767676;
+  --text: #111111;
+  --text-2: #6B6B6B;
+  --text-3: #707070;
+  --accent: #1A1A1A;
+  --focus: #2563EB;
+  --success: #0F7B35;
+  --warning: #B45309;
+  --danger: #B42318;
+  --mono: ui-monospace, SFMono-Regular, monospace;
+}
