@@ -8,17 +8,17 @@ export default function App() {
   const [role, setRole] = useState('customer')
   const [user, setUser] = useState(null)
 
-  // /health/ hands out the CSRF cookie; /auth/me/ restores an existing session.
+  // /auth/csrf/ hands out the CSRF cookie; /me/ restores an existing session.
   useEffect(() => {
     api
-      .get('/health/')
-      .then(() => api.get('/auth/me/'))
+      .get('/auth/csrf/')
+      .then(() => api.get('/me/'))
       .then(setUser)
       .catch(() => {})
   }, [])
 
   const logout = () => {
-    api.post('/auth/logout/').finally(() => setUser(null))
+    api.post('/auth/logout/', {}).finally(() => setUser(null))
   }
 
   return (
@@ -41,13 +41,13 @@ export default function App() {
       </header>
       <main>
         {role === 'customer' &&
-          (user && !user.isOperator ? (
+          (user && !user.is_staff ? (
             <Client onSessionExpired={() => setUser(null)} />
           ) : (
             <Login key="customer" role="customer" onLogin={setUser} />
           ))}
         {role === 'reviewer' &&
-          (user?.isOperator ? (
+          (user?.is_staff ? (
             <Operator onSessionExpired={() => setUser(null)} />
           ) : (
             <Login key="operator" role="operator" onLogin={setUser} />

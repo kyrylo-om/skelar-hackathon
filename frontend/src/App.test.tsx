@@ -43,11 +43,11 @@ function stubApi(routes: Routes) {
 }
 
 const operatorRoutes: Routes = {
-  'GET /health/': () => json({ status: 'ok' }),
-  'GET /auth/me/': () => json({ username: 'op', isOperator: true }),
-  'GET /chats/': () => json([chatItem]),
-  'GET /chats/1/': () => json(chatDetail),
-  'GET /audit/': () => json([]),
+  'GET /auth/csrf/': () => json({ detail: 'CSRF cookie set.' }),
+  'GET /me/': () => json({ id: '1', username: 'op', is_staff: true }),
+  'GET /review/chats/': () => json([chatItem]),
+  'GET /review/chats/1/': () => json(chatDetail),
+  'GET /review/audit/': () => json([]),
 }
 
 afterEach(() => {
@@ -55,7 +55,7 @@ afterEach(() => {
 })
 
 test('customer tab asks for a customer login when there is no session', () => {
-  stubApi({ 'GET /health/': () => json({ status: 'ok' }) })
+  stubApi({ 'GET /auth/csrf/': () => json({ detail: 'CSRF cookie set.' }) })
   render(<App />)
 
   expect(screen.getByText('Вхід для клієнтів')).toBeInTheDocument()
@@ -68,9 +68,9 @@ const customerChat = {
 }
 
 const customerRoutes: Routes = {
-  'GET /health/': () => json({ status: 'ok' }),
-  'GET /auth/me/': () => json({ username: 'olena', isOperator: false }),
-  'GET /my/chat/': () => json(customerChat),
+  'GET /auth/csrf/': () => json({ detail: 'CSRF cookie set.' }),
+  'GET /me/': () => json({ id: '2', username: 'olena', is_staff: false }),
+  'GET /review/my/chat/': () => json(customerChat),
 }
 
 test('signed in customer sees their chat from the API', async () => {
@@ -91,7 +91,7 @@ test('customer message is posted to the API', async () => {
       ],
     }),
   )
-  stubApi({ ...customerRoutes, 'POST /my/chat/messages/': post })
+  stubApi({ ...customerRoutes, 'POST /review/my/chat/messages/': post })
   render(<App />)
 
   fireEvent.change(await screen.findByPlaceholderText('Напишіть повідомлення…'), {
@@ -104,7 +104,7 @@ test('customer message is posted to the API', async () => {
 })
 
 test('reviewer tab asks for a login when there is no session', async () => {
-  stubApi({ 'GET /health/': () => json({ status: 'ok' }) })
+  stubApi({ 'GET /auth/csrf/': () => json({ detail: 'CSRF cookie set.' }) })
   render(<App />)
 
   fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
@@ -114,8 +114,8 @@ test('reviewer tab asks for a login when there is no session', async () => {
 
 test('wrong credentials show the server error', async () => {
   stubApi({
-    'GET /health/': () => json({ status: 'ok' }),
-    'POST /auth/login/': () => json({ detail: 'Невірний логін або пароль' }, 400),
+    'GET /auth/csrf/': () => json({ detail: 'CSRF cookie set.' }),
+    'POST /auth/login/': () => json({ error: { code: 'permission_denied', message: 'Невірний логін або пароль' } }, 403),
   })
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
@@ -141,21 +141,21 @@ test('approving posts the decision with the review id', async () => {
   const decision = vi.fn(() =>
     json({ ...chatDetail, status: 'resolved', review: { ...chatDetail.review, status: 'approved' } }),
   )
-  const fetchMock = stubApi({ ...operatorRoutes, 'POST /reviews/9/decision/': decision })
+  const fetchMock = stubApi({ ...operatorRoutes, 'POST /review/reviews/9/decision/': decision })
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
 
   fireEvent.click(await screen.findByRole('button', { name: 'Схвалити' }))
 
   await waitFor(() => expect(decision).toHaveBeenCalled())
-  const call = fetchMock.mock.calls.find(([url]) => url.endsWith('/reviews/9/decision/'))
+  const call = fetchMock.mock.calls.find(([url]) => url.endsWith('/review/reviews/9/decision/'))
   expect(JSON.parse(call![1]!.body as string)).toEqual({ decision: 'approved', note: '' })
 })
 
 test('an expired session sends the operator back to the login', async () => {
   stubApi({
     ...operatorRoutes,
-    'GET /chats/': () => json({ detail: 'forbidden' }, 403),
+    'GET /review/chats/': () => json({ detail: 'forbidden' }, 403),
   })
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
@@ -166,13 +166,13 @@ test('an expired session sends the operator back to the login', async () => {
 test('a failed CSRF check shows an error but keeps the operator signed in', async () => {
   stubApi({
     ...operatorRoutes,
-    'POST /reviews/9/decision/': () => json({ detail: 'CSRF Failed: bad origin' }, 403),
+    'POST /review/reviews/9/decision/': () => json({ error: { code: 'csrf_failed', message: 'Потрібен коректний CSRF-токен.' } }, 403),
   })
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
 
   fireEvent.click(await screen.findByRole('button', { name: 'Схвалити' }))
 
-  expect(await screen.findByText('CSRF Failed: bad origin')).toBeInTheDocument()
+  expect(await screen.findByText('Потрібен коректний CSRF-токен.')).toBeInTheDocument()
   expect(screen.queryByText('Вхід для менеджерів')).not.toBeInTheDocument()
 })

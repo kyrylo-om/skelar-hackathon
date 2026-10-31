@@ -1,7 +1,7 @@
 # 07. Human review: черга, апрув, повторна перевірка Policy, аудит
 
 Статус: чернетка. **[узгодити]** позначає пункти без підтвердження команди.
-Поточна реалізація: `backend/apps/support/services.py` (`open_review`, `decide_review`), `views.py`
+Поточна реалізація: `backend/apps/review/services.py` (`open_review`, `decide_review`), `views.py`
 (`ReviewDecisionView`), модель `ReviewItem`. Повторної перевірки Policy ще немає **[узгодити]**.
 
 > Це не LLM-агент. Єдиний необов'язковий LLM-компонент: короткий підсумок для оператора (розділ 8). Рішення
@@ -104,11 +104,11 @@ proposed ──► pending_review ──► approved ──► (Policy ще ра
 
 | Дія | Поточний ендпоінт | Опис |
 |---|---|---|
-| Черга чатів | `GET /api/chats/` | усі чати, фільтр за статусом |
-| Деталі чату | `GET /api/chats/{id}/` | повідомлення, trace, перевірка |
-| Рішення | `POST /api/reviews/{id}/decision/` | `{"decision": "approved\|rejected", "note": "..."}` |
-| Відповідь клієнту | `POST /api/chats/{id}/reply/` | оператор у тому ж чаті |
-| Аудит | `GET /api/audit/` | останні записи |
+| Черга чатів | `GET /api/review/chats/` | усі чати, фільтр за статусом |
+| Деталі чату | `GET /api/review/chats/{id}/` | повідомлення, trace, перевірка |
+| Рішення | `POST /api/review/reviews/{id}/decision/` | `{"decision": "approved\|rejected", "note": "..."}` |
+| Відповідь клієнту | `POST /api/review/chats/{id}/reply/` | оператор у тому ж чаті |
+| Аудит | `GET /api/review/audit/` | останні записи |
 
 Цільовий дизайн (одне з двох, не обидва): `POST /api/review/{id}/approve` (опційно змінені `params`),
 `POST /api/review/{id}/reject` (обов'язкова `reason`), `GET /api/review/queue`.
@@ -180,8 +180,8 @@ FACTS>>>
 | Обов'язкова повторна перевірка Policy, транзакційний замок, обов'язкова причина відхилення, запис аудиту | **код** |
 
 ## Відкриті питання **[узгодити]**
-1. Який API лишається: мій (`/api/reviews/...`), пропозиція промпта 6 або `/api/operator/conversations/...` з `dev`.
-2. Чи об'єднуємо модель `ReviewItem` (`apps/support`) з `Action` (`dev`).
+1. Який API лишається: мій (`/api/review/reviews/...`), пропозиція промпта 6 або `/api/operator/conversations/...` з `dev`.
+2. Чи об'єднуємо модель `ReviewItem` (`apps/review`) з `Action` (`dev`).
 3. Скільки редагованих параметрів дозволено оператору й де це задається.
 4. SLA і стан `expired`.
 5. Чи помилка запису аудиту блокує виконання.

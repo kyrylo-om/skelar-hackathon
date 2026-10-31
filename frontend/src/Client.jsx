@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, api } from './api/client'
+import { ApiError, api, apiErrorMessage, isCsrfFailure } from './api/client'
 
 const EXAMPLES = [
   ['Де моя посилка?', 'Статус'],
@@ -20,10 +20,10 @@ export default function Client({ onSessionExpired }) {
 
   const fail = useCallback(
     (err) => {
-      if (err instanceof ApiError && err.status === 403 && !String(err.data?.detail).startsWith('CSRF')) {
+      if (err instanceof ApiError && err.status === 403 && !isCsrfFailure(err)) {
         onSessionExpired?.()
       } else {
-        setError(err instanceof ApiError ? err.data?.detail || 'Помилка сервера' : 'Сервер недоступний')
+        setError(apiErrorMessage(err))
       }
     },
     [onSessionExpired],
@@ -32,7 +32,7 @@ export default function Client({ onSessionExpired }) {
   useEffect(() => {
     const load = () =>
       api
-        .get('/my/chat/')
+        .get('/review/my/chat/')
         .then((data) => {
           setChat(data)
           setError('')
@@ -54,7 +54,7 @@ export default function Client({ onSessionExpired }) {
     setBusy(true)
     setError('')
     try {
-      setChat(await api.post('/my/chat/messages/', { text: message }))
+      setChat(await api.post('/review/my/chat/messages/', { text: message }))
       setText('')
     } catch (err) {
       fail(err)

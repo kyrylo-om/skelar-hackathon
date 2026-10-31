@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ApiError, api } from './api/client'
+import { ApiError, api, apiErrorMessage } from './api/client'
 
 export default function Login({ role, onLogin }) {
   const [username, setUsername] = useState('')
@@ -12,13 +12,13 @@ export default function Login({ role, onLogin }) {
     setBusy(true)
     setError('')
     try {
-      onLogin(await api.post('/auth/login/', { username, password, role }))
+      onLogin(await api.post('/auth/login/', { username, password }))
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.status === 429 ? 'Забагато спроб, спробуйте за хвилину' : err.data?.detail || 'Не вдалося увійти')
-      } else {
-        setError('Сервер недоступний')
-      }
+      setError(
+        err instanceof ApiError && err.status === 429
+          ? 'Забагато спроб, спробуйте за хвилину'
+          : apiErrorMessage(err, 'Не вдалося увійти'),
+      )
     } finally {
       setBusy(false)
     }

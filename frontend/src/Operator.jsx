@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, api } from './api/client'
+import { ApiError, api, apiErrorMessage, isCsrfFailure } from './api/client'
 import Trace from './Trace'
 
 const STATUS = { needs_review: 'Чекає людину', ai_handling: 'AI веде', resolved: 'Вирішено' }
@@ -10,10 +10,6 @@ const POLL_MS = 5000
 
 const clock = (iso) =>
   new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
-function errorText(err) {
-  return err instanceof ApiError ? err.data?.detail || 'Помилка сервера' : 'Сервер недоступний'
-}
 
 export default function Operator({ onSessionExpired }) {
   const [chats, setChats] = useState([])
@@ -34,22 +30,21 @@ export default function Operator({ onSessionExpired }) {
   // also a 403, but the session is fine, so only report it.
   const fail = useCallback(
     (err) => {
-      const csrf = String(err instanceof ApiError ? err.data?.detail : '').startsWith('CSRF')
-      if (err instanceof ApiError && err.status === 403 && !csrf) onSessionExpired?.()
-      else setError(errorText(err))
+      if (err instanceof ApiError && err.status === 403 && !isCsrfFailure(err)) onSessionExpired?.()
+      else setError(apiErrorMessage(err))
     },
     [onSessionExpired],
   )
 
   const refresh = useCallback(() => {
-    Promise.all([api.get('/chats/'), api.get('/audit/')])
+    Promise.all([api.get('/review/chats/'), api.get('/review/audit/')])
       .then(([list, log]) => {
         setChats(list)
         setAudit(log)
         setError('')
       })
       .catch(fail)
-    if (activeId !== null) api.get(`/chats/${activeId}/`).then(setDetail).catch(fail)
+    if (activeId !== null) api.get(`/review/chats/${activeId}/`).then(setDetail).catch(fail)
   }, [activeId, fail])
 
   useEffect(() => {
@@ -74,10 +69,10 @@ export default function Operator({ onSessionExpired }) {
   }
 
   const send = async () => {
-    if (await run(() => api.post(`/chats/${activeId}/reply/`, { text: reply }))) setReply('')
+    if (await run(() => api.post(`/review/chats/${activeId}/reply/`, { text: reply }))) setReply('')
   }
   const decide = async (decision) => {
-    if (await run(() => api.post(`/reviews/${detail.review.id}/decision/`, { decision, note: why }))) setWhy('')
+    if (await run(() => api.post(`/review/reviews/${detail.review.id}/decision/`, { decision, note: why }))) setWhy('')
   }
 
   const q = query.trim().toLowerCase()
