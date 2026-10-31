@@ -70,32 +70,42 @@ A proposal runs at most once. A second execute, or an execute after reject or ex
 drops pending ones. Every tool call and endpoint call goes to the JSONL audit log
 (`EXECUTION_AUDIT_LOG`, default `audit.jsonl`).
 
-## Wiring it into the orchestrator (`McpGateway`, not written yet)
+## The orchestrator on top (`ORCHESTRATOR_GATEWAY=mcp`)
 
-[client.py](client.py) is a synchronous client for exactly this. The orchestrator already goes
-through one interface, `DevDomainGateway` in `backend/apps/orchestrator/gateway.py`
-(`turn()`, `run(turn, action, params, facts)` → `ActionOutcome` `done` / `awaiting_confirmation` /
-`failed`). An `McpGateway` with the same interface would:
+The backend drives the product through
+[backend/apps/orchestrator/mcp_gateway.py](../backend/apps/orchestrator/mcp_gateway.py), an
+`McpGateway` with the same interface as the built-in `DevDomainGateway`:
 
-1. **`turn()`**: yield `sign(tenant, product_customer_id)` for the session's customer. No lease
-   is needed: proposals are single-use.
-2. **Facts**: replace `facts.load_facts(user)` with `client.read(token, path)` for the paths the
-   manifest names for the product's entities.
-3. **`run()` for a read-only action**: `done` with those facts.
-4. **`run()` for a state-changing action, after Gate said `execute`**: build `method`, `path` and
-   `body` from the manifest action's `executor` template ([08_MANIFEST.md](../docs/agents/08_MANIFEST.md)),
-   `client.propose(...)`, then `client.execute(proposal_id)`.
-   - `executed` → `done`, with `result.body` as the new facts.
-   - `failed` → `failed`, with `result.body.detail` as the error.
-5. **`confirm: customer`**: propose only, and return `awaiting_confirmation` with
-   `action_id = proposal_id`. The customer's confirm endpoint checks that `client.proposal(id)`
-   has this session's tenant and customer, then calls `client.execute(id)`. A "yes" in the chat
-   text never does.
-6. **Operator approval (`execute_approved`)**: Policy re-check as today, then propose and execute.
-   On rejection, call `client.reject(id)` for any open proposal.
+1. **Facts** for Actor, Critic and Policy come from `read("/subscription")` and `read("/payments")`
+   as the session's customer. If the product is down or the account is not connected, the chat
+   goes to a human.
+2. **After Gate says `execute`**, the action is proposed (`method`, `path`, `body` from the
+   gateway's `CALLS` table, the future manifest `executor`), then executed.
+   - `executed` → reply from the product's real answer.
+   - `failed` → honest reply, and the chat goes to a human.
+3. **`confirm: customer` actions** (cancelling auto-renewal) are only proposed. The chat shows the
+   usual confirm button, and only the customer's own `POST /api/actions/{id}/confirm/` executes
+   them, once, and never after the chat went to a human.
+4. **Operator approvals** re-check Policy with fresh facts from the product, then propose and
+   execute.
 
-An LLM agent with MCP tool use can also connect directly with a customer token. It can read and
-propose, but nothing it proposes runs until our backend executes it.
+Run it all (each in its own terminal, from the repository root, with the variables from "Run"):
+
+```bash
+python -m mocks.cloudbox
+python -m execution
+cd backend && ORCHESTRATOR_GATEWAY=mcp EXECUTION_SECRET=change-me EXECUTION_SERVICE_KEY=change-me-too \
+    python manage.py runserver
+```
+
+The seed_demo accounts map to CloudBox customers through `EXECUTION_CUSTOMERS` (default
+`paid_plus=c-101,active_pro=c-102,refund_review=c-103`). Sign in to the chat as `paid_plus` and
+write «Оплатив Plus, а тариф досі Free»: the CloudBox portal (http://127.0.0.1:9201) switches
+to Plus.
+
+[client.py](client.py) is the same contract for anything outside Django. An LLM agent with MCP
+tool use can also connect directly with a customer token. It can read and propose, but nothing it
+proposes runs until our backend executes it.
 
 Not covered yet: undo, other product auth schemes (only Bearer key + `X-Customer-Id`), and
 persistence of pending proposals.
