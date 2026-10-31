@@ -17,7 +17,7 @@ from django.utils import timezone
 from apps.review import services as review
 from apps.review.models import Chat, ReviewItem
 from apps.review.ports import ExecutionError
-from apps.security import policy, router
+from apps.security import guard, policy, router
 from apps.security.contracts import BLOCK, CLARIFY, EXECUTE, REVIEW, trace_step
 from apps.security.gate import gate_plan, screen_input
 from apps.security.llm import message_budget
@@ -32,6 +32,17 @@ from .models import TurnState
 
 logger = logging.getLogger("apps.orchestrator")
 PRIORITY = {"low": Chat.Priority.LOW, "normal": Chat.Priority.NORMAL, "high": Chat.Priority.HIGH}
+
+
+@dataclass
+class Turn:
+    """What the pipeline learned about this message, kept so the reply can be written from it."""
+
+    masked: str = ""
+    language: str = "uk"
+    facts: dict = field(default_factory=dict)
+    history: list = field(default_factory=list)
+    outcomes: list = field(default_factory=list)
 
 
 @dataclass
@@ -52,6 +63,22 @@ def _gateway(user):
     if settings.ORCHESTRATOR_GATEWAY == "mcp":
         return McpGateway(user)
     return DevDomainGateway(user)
+
+
+HISTORY_TURNS = 8
+HISTORY_CHARS = 300
+
+
+def _history(chat: Chat) -> list[dict]:
+    """Earlier messages, oldest first, personal data masked; the newest is sent separately."""
+    recent = list(chat.messages.exclude(role="system").order_by("-id")[: HISTORY_TURNS + 1])
+    recent.reverse()
+    if recent and recent[-1].role == "customer":
+        recent = recent[:-1]  # the message being handled now
+    return [
+        {"role": m.role, "text": guard.mask_pii(m.text)[:HISTORY_CHARS]}
+        for m in recent[-HISTORY_TURNS:]
+    ]
 
 
 def _summary(masked: str, intent: str, reason: str) -> str:
@@ -87,7 +114,17 @@ def _handoff(
     )
 
 
-def _triage(masked: str, state: TurnState, manifest: Manifest) -> dict:
+def _keyword_intent(lowered: str, manifest: Manifest) -> str | None:
+    """Explicit requests that must reach a person even when the model is down or unsure."""
+    esc = manifest.escalation
+    if any(term in lowered for term in esc.human_terms) and "human_request" in manifest.intents:
+        return "human_request"
+    if any(term in lowered for term in esc.refund_terms) and "refund" in manifest.intents:
+        return "refund"
+    return None
+
+
+def _triage(masked: str, state: TurnState, manifest: Manifest, history: list) -> dict:
     esc = manifest.escalation
     raw = router.route(
         "triage",
@@ -95,33 +132,40 @@ def _triage(masked: str, state: TurnState, manifest: Manifest) -> dict:
             "context": {
                 "intents": manifest.intent_ids(),
                 "clarifications_used": state.clarifications_used,
+                "history": history,
             },
             "customer_message": masked,
         },
     )
     intent = raw.get("intent")
     confidence = raw.get("confidence", 1.0)
-    if raw.get("_fallback") or intent not in {*manifest.intents, *SERVICE_INTENTS}:
+    unusable = raw.get("_fallback") or intent not in {*manifest.intents, *SERVICE_INTENTS}
+    if unusable:
         intent, confidence = UNCLEAR, 0.0
     if isinstance(confidence, (int, float)) and confidence < esc.confidence_threshold:
         if intent not in (SMALLTALK, OUT_OF_SCOPE):
             intent = UNCLEAR
     priority = raw.get("priority", "normal")
     lowered = masked.lower()
+    if unusable or intent == UNCLEAR:
+        # A broken or unsure model must not delay an explicit request for a person or a refund.
+        intent = _keyword_intent(lowered, manifest) or intent
     # Floors the model cannot lower: anger and legal threats are always urgent, legal ones human.
     if raw.get("sentiment") == "angry":
         priority = "high"
     if any(term in lowered for term in esc.legal_terms) and "legal_threat" in manifest.intents:
         intent, priority = "legal_threat", "high"
+    language = raw.get("language") if raw.get("language") in ("uk", "en") else "uk"
     return {
         "intent": intent,
+        "language": language,
         "confidence": confidence,
         "sentiment": raw.get("sentiment", "neutral"),
         "priority": priority,
     }
 
 
-def _actor_context(triage, facts, allowed, state, manifest, feedback):
+def _actor_context(triage, facts, allowed, state, manifest, feedback, history=(), pending=None):
     esc = manifest.escalation
     return {
         "triage": triage,
@@ -130,12 +174,19 @@ def _actor_context(triage, facts, allowed, state, manifest, feedback):
             {"name": a.name, "description": a.description, "params": a.params}
             for a in allowed.values()
         ],
-        "pending_action": None,
+        "pending_action": pending,
         "clarifications_used": state.clarifications_used,
         "max_clarifications": esc.max_clarifications,
         "confidence_threshold": esc.confidence_threshold,
         "previous_attempt_problem": feedback,
+        "history": list(history),
     }
+
+
+def _pending_summary(user) -> dict | None:
+    """What the model may know about a waiting confirmation: what it is, not how to confirm."""
+    pending = pending_confirmation(user)
+    return {"kind": pending["kind"], "description": pending["description"]} if pending else None
 
 
 def _describe(plan: dict) -> str:
@@ -144,7 +195,12 @@ def _describe(plan: dict) -> str:
     return ", ".join(a["name"] for a in plan["actions"]) or "дій немає"
 
 
-def _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, trace):
+def _handed_off(chat: Chat) -> bool:
+    """A person has taken the conversation, possibly while the models were still working."""
+    return chat.reviews.filter(status=ReviewItem.Status.PENDING).exists()
+
+
+def _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, trace, history):
     """Ask the Actor, validate, gate. Returns (plan, gate_result) or an Outcome to stop with."""
     esc = manifest.escalation
     intent, priority = triage["intent"], triage["priority"]
@@ -153,7 +209,16 @@ def _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, t
         raw = router.route(
             "actor",
             {
-                "context": _actor_context(triage, facts, allowed, state, manifest, feedback),
+                "context": _actor_context(
+                    triage,
+                    facts,
+                    allowed,
+                    state,
+                    manifest,
+                    feedback,
+                    history,
+                    ctx.get("pending_action"),
+                ),
                 "customer_message": masked,
             },
         )
@@ -180,13 +245,17 @@ def _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, t
     return _handoff(manifest, trace, masked, intent, priority, "plan rejected repeatedly")
 
 
-def _execute(user, plan, facts, masked, intent, priority, manifest, trace):
+def _execute(user, chat, plan, facts, masked, intent, priority, manifest, trace, turn):
     gateway = _gateway(user)
     outcomes: list[ActionOutcome] = []
+    taken_over = False
     try:
-        with gateway.turn("orchestrator turn") as turn:
+        with gateway.turn("orchestrator turn") as lease:
             for action in plan["actions"]:
-                outcome = gateway.run(turn, action["name"], action["params"], facts)
+                if _handed_off(chat):  # last look before every change: a person may have taken over
+                    taken_over = True
+                    break
+                outcome = gateway.run(lease, action["name"], action["params"], facts)
                 outcomes.append(outcome)
                 ok = outcome.status != FAILED
                 trace.append(
@@ -202,6 +271,8 @@ def _execute(user, plan, facts, masked, intent, priority, manifest, trace):
     except Busy:
         return Outcome("busy", manifest.responses["busy"], trace, intent, priority)
 
+    if taken_over and not outcomes:
+        return Outcome("review", manifest.responses["waiting"], trace, intent, priority)
     for action, outcome in zip(plan["actions"], outcomes, strict=False):
         spec = manifest.actions[action["name"]]
         if outcome.status in (DONE, AWAITING) and not spec.read_only:
@@ -220,11 +291,12 @@ def _execute(user, plan, facts, masked, intent, priority, manifest, trace):
         )
         out.reply = manifest.responses["failed"]
         return out
-    reply = responder.polish(responder.outcome_reply(outcomes, facts, manifest), "execute", "uk")
+    turn.outcomes = outcomes
+    reply = responder.outcome_reply(outcomes, facts, manifest)  # the draft; compose() rewrites it
     return Outcome("execute", reply, trace, intent, priority, reset_clarifications=True)
 
 
-def _run(chat, user, text, state, manifest) -> Outcome:
+def _run(chat, user, text, state, manifest, turn) -> Outcome:
     esc = manifest.escalation
     checked, step = screen_input(user.pk, text)
     trace = [step]
@@ -233,11 +305,7 @@ def _run(chat, user, text, state, manifest) -> Outcome:
             "block", manifest.responses["block"], trace, "blocked", reason=checked.reason
         )
     masked = checked.masked_text
-
-    if chat.reviews.filter(status=ReviewItem.Status.PENDING).exists():
-        return Outcome(
-            "review", manifest.responses["review"], trace, state.last_intent or "waiting"
-        )
+    turn.masked = masked
 
     try:
         facts = _gateway(user).load_facts()
@@ -245,7 +313,17 @@ def _run(chat, user, text, state, manifest) -> Outcome:
         reason = f"product unavailable: {exc}"
         return _handoff(manifest, trace, masked, "unknown", "normal", reason)
     ctx = product.policy_ctx(user, facts)
-    triage = _triage(masked, state, manifest)
+    history = _history(chat)
+    turn.facts, turn.history = facts, history
+    ctx["history"] = history  # the Critic reads it; Policy ignores it
+    ctx["pending_action"] = _pending_summary(user)  # a button the customer has not pressed
+
+    if _handed_off(chat):
+        return Outcome(
+            "review", manifest.responses["waiting"], trace, state.last_intent or "waiting"
+        )
+
+    triage = _triage(masked, state, manifest, history)
     intent, priority = triage["intent"], triage["priority"]
     trace.append(
         trace_step("triage", "info", f"{intent} · {triage['sentiment']} · пріоритет {priority}")
@@ -267,10 +345,15 @@ def _run(chat, user, text, state, manifest) -> Outcome:
         return Outcome("clarify", manifest.responses["clarify"], trace, intent, priority)
 
     allowed = {a.name: a for a in manifest.allowed_actions(intent)}
-    stopped = _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, trace)
+    stopped = _plan_and_gate(
+        user, masked, triage, facts, ctx, allowed, state, manifest, trace, history
+    )
     if isinstance(stopped, Outcome):
         return stopped
     plan, result = stopped
+
+    if _handed_off(chat):  # a person took over while the models were working: do nothing more
+        return Outcome("review", manifest.responses["waiting"], trace, intent, priority)
 
     if result.decision == BLOCK:
         return Outcome("block", manifest.responses["block"], trace, intent, priority, result.reason)
@@ -291,10 +374,11 @@ def _run(chat, user, text, state, manifest) -> Outcome:
         )
     if result.decision != EXECUTE:  # unreachable today; refuse rather than guess
         return Outcome("block", manifest.responses["block"], trace, intent, priority)
-    return _execute(user, plan, facts, masked, intent, priority, manifest, trace)
+    return _execute(user, chat, plan, facts, masked, intent, priority, manifest, trace, turn)
 
 
 def _apply(chat: Chat, state: TurnState, outcome: Outcome) -> None:
+    customer = chat.customer
     with transaction.atomic():
         review.add_trace(chat, outcome.trace)
         review.add_message(chat, "ai", outcome.reply)
@@ -307,6 +391,8 @@ def _apply(chat: Chat, state: TurnState, outcome: Outcome) -> None:
             chat.summary = outcome.summary
             chat.save(update_fields=["summary"])
             review.open_review(chat, **outcome.review)
+            if customer is not None:
+                _gateway(customer).hand_off()  # no stale confirm button survives
         if outcome.reset_clarifications:
             state.clarifications_used = 0
         if outcome.intent:
@@ -323,7 +409,19 @@ def handle_customer_message(chat: Chat, message=None, manifest: Manifest | None 
     else:
         text = message.text if message is not None else ""
         with message_budget():
-            outcome = _run(chat, chat.customer, text, state, manifest)
+            turn = Turn()
+            outcome = _run(chat, chat.customer, text, state, manifest, turn)
+            # The Responder model writes every reply from real facts; the draft is the fallback.
+            outcome.reply = responder.compose(
+                outcome.decision,
+                outcome.reply,
+                facts=turn.facts,
+                outcomes=turn.outcomes,
+                history=turn.history,
+                masked_text=turn.masked,
+                manifest=manifest,
+                language=turn.language,
+            )
     _apply(chat, state, outcome)
     logger.info("orchestrator decision=%s intent=%s", outcome.decision, outcome.intent)
     return outcome

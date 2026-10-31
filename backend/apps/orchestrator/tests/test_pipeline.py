@@ -104,7 +104,7 @@ class HumanReviewScenarioTests(TestCase):
         chat = send(user, "Ну що там?")
 
         assert len(pending_reviews(chat)) == 1
-        assert "спеціалісту" in last_reply(chat)
+        assert "у спеціаліста" in last_reply(chat)
 
     def test_a_legal_threat_is_urgent_and_human_only(self):
         user, _ = make_customer()

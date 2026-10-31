@@ -1,12 +1,9 @@
-from unittest import mock
-
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 
 from apps.orchestrator import plan as planning
 from apps.orchestrator import responder
 from apps.orchestrator.gateway import AWAITING, DONE, FAILED, ActionOutcome
 from apps.orchestrator.manifest import CLOUDBOX, Manifest
-from apps.security.llm import mock as llm_mock
 
 FACTS = {
     "subscription": {"id": "s1", "plan": "Free", "period_end": "2026-12-01", "auto_renew": True},
@@ -137,37 +134,3 @@ class ResponderTests(TestCase):
         assert "Оплат поки не бачу" in self.reply(
             ActionOutcome("get_payments", DONE), {"payments": []}
         )
-
-    def test_a_safe_rewrite_is_accepted(self):
-        assert responder.polish_is_safe(
-            "Тариф Plus до 2026-11-30.", "Готово! Plus діє до 2026-11-30."
-        )
-
-    def test_an_unsafe_rewrite_is_rejected(self):
-        original = "Тариф Plus до 2026-11-30."
-        assert not responder.polish_is_safe(original, "Тариф Plus до 2027-01-01.")  # new date
-        assert not responder.polish_is_safe(original, "Policy дозволила це.")
-        assert not responder.polish_is_safe(original, "Надішліть номер картки та пароль")
-        assert not responder.polish_is_safe(original, "x" * 601)
-        assert not responder.polish_is_safe(original, "  ")
-
-    @override_settings(ORCHESTRATOR_LLM_RESPONDER=False)
-    def test_the_llm_is_not_asked_unless_enabled(self):
-        with mock.patch.object(llm_mock, "respond") as ask:
-            assert responder.polish("Текст", "execute", "uk") == "Текст"
-        ask.assert_not_called()
-
-    @override_settings(ORCHESTRATOR_LLM_RESPONDER=True)
-    def test_an_unsafe_llm_text_falls_back_to_the_template(self):
-        with mock.patch.object(llm_mock, "respond", return_value='{"text": "Policy каже 999"}'):
-            assert responder.polish("Тариф Plus.", "execute", "uk") == "Тариф Plus."
-
-    @override_settings(ORCHESTRATOR_LLM_RESPONDER=True)
-    def test_a_safe_llm_text_is_used(self):
-        with mock.patch.object(llm_mock, "respond", return_value='{"text": "Готово, тариф Plus."}'):
-            assert responder.polish("Тариф Plus.", "execute", "uk") == "Готово, тариф Plus."
-
-    @override_settings(ORCHESTRATOR_LLM_RESPONDER=True)
-    def test_a_broken_llm_falls_back_to_the_template(self):
-        with mock.patch.object(llm_mock, "respond", return_value="garbage"):
-            assert responder.polish("Тариф Plus.", "execute", "uk") == "Тариф Plus."

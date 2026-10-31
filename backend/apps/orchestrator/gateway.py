@@ -10,11 +10,12 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+from django.db import transaction
 from django.http import Http404
 from rest_framework.exceptions import APIException
 
 from apps.support import services as support
-from apps.support.models import Conversation
+from apps.support.models import Action, Conversation
 
 from . import facts as product
 
@@ -64,6 +65,25 @@ class DevDomainGateway:
     def _ledger(self) -> Conversation:
         conversation = Conversation.objects.filter(user=self.user, status="ai").first()
         return conversation or Conversation.objects.create(user=self.user)
+
+    def hand_off(self) -> int:
+        """The customer's conversation moved to a human: nothing the AI proposed may be confirmed.
+
+        Open turns are invalidated (the version moves on) and every proposed or waiting action is
+        rejected, so a stale confirm button or a late AI callback finds nothing to act on.
+        Returns the number of actions that were rejected.
+        """
+        with transaction.atomic():
+            for ledger in Conversation.objects.select_for_update().filter(
+                user=self.user, status="ai"
+            ):
+                ledger.version += 1
+                ledger.in_flight_token = None
+                ledger.in_flight_at = None
+                ledger.save()
+            return Action.objects.filter(
+                requesting_user=self.user, status__in=["proposed", "awaiting_confirmation"]
+            ).update(status="rejected")
 
     @contextmanager
     def turn(self, label: str = "orchestrator turn"):
