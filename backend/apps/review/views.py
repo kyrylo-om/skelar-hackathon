@@ -1,67 +1,19 @@
-from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from . import ports, services
 from .models import AuditLog, Chat, ReviewItem
-from .permissions import IsCustomer, IsOperator, is_operator
+from .permissions import IsCustomer, IsOperator
 from .serializers import (
     AuditSerializer,
     ChatDetailSerializer,
     ChatListSerializer,
     CustomerChatSerializer,
     DecisionInput,
-    LoginInput,
     ReplyInput,
 )
-
-
-def _user_payload(user):
-    return {"username": user.get_username(), "isOperator": is_operator(user)}
-
-
-class LoginThrottle(SimpleRateThrottle):
-    scope = "login"
-
-    def get_cache_key(self, request, view):
-        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@throttle_classes([LoginThrottle])
-def login_view(request):
-    data = LoginInput(data=request.data)
-    data.is_valid(raise_exception=True)
-    user = authenticate(
-        request, username=data.validated_data["username"], password=data.validated_data["password"]
-    )
-    if user is None:
-        return Response({"detail": "Невірний логін або пароль"}, status=status.HTTP_400_BAD_REQUEST)
-    wants_operator = data.validated_data["role"] == "operator"
-    if is_operator(user) != wants_operator:
-        detail = "Немає доступу до кабінету" if wants_operator else "Це акаунт менеджера"
-        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
-    login(request, user)
-    return Response(_user_payload(user))
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def logout_view(request):
-    logout(request)
-    return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def me_view(request):
-    return Response(_user_payload(request.user))
 
 
 class MyChatView(APIView):

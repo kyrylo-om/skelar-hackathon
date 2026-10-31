@@ -156,6 +156,8 @@ class Command(BaseCommand):
         if created:
             user.set_password(options["password"])
             user.save()
+        user.is_staff = True  # the accounts app reports is_staff; the cabinet keys off it
+        user.save()
         user.groups.add(group)
 
         if options["reset"]:

@@ -32,47 +32,6 @@ class SupportApiTests(TestCase):
     def login(self, user=None):
         self.client.force_login(user or self.operator)
 
-    # auth
-
-    def test_login_requires_operator(self):
-        response = self.client.post(
-            reverse("login"),
-            {"username": "cust", "password": PASSWORD},
-            content_type="application/json",
-        )
-        assert response.status_code == 403
-
-    def test_login_rejects_bad_password(self):
-        response = self.client.post(
-            reverse("login"),
-            {"username": "op", "password": "nope"},
-            content_type="application/json",
-        )
-        assert response.status_code == 400
-
-    def test_login_and_me(self):
-        response = self.client.post(
-            reverse("login"),
-            {"username": "op", "password": PASSWORD},
-            content_type="application/json",
-        )
-        assert response.status_code == 200
-        assert self.client.get(reverse("me")).json() == {"username": "op", "isOperator": True}
-
-    def test_login_is_throttled(self):
-        for _ in range(10):
-            self.client.post(
-                reverse("login"),
-                {"username": "op", "password": "x"},
-                content_type="application/json",
-            )
-        response = self.client.post(
-            reverse("login"), {"username": "op", "password": "x"}, content_type="application/json"
-        )
-        assert response.status_code == 429
-
-    # access control
-
     def test_anonymous_and_customers_cannot_read_chats(self):
         assert self.client.get(reverse("chat-list")).status_code == 403
         self.login(self.customer)
@@ -185,16 +144,6 @@ class CustomerChatTests(TestCase):
 
     def post_json(self, name, data):
         return self.client.post(reverse(name), data, content_type="application/json")
-
-    def test_customer_login_needs_customer_role(self):
-        ok = self.post_json("login", {"username": "cust", "password": PASSWORD, "role": "customer"})
-        assert ok.status_code == 200
-        assert ok.json() == {"username": "cust", "isOperator": False}
-        self.client.logout()
-        wrong = self.post_json(
-            "login", {"username": "op", "password": PASSWORD, "role": "customer"}
-        )
-        assert wrong.status_code == 403
 
     def test_anonymous_cannot_use_my_chat(self):
         assert self.client.get(reverse("my-chat")).status_code == 403

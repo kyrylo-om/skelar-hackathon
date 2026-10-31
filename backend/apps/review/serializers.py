@@ -79,9 +79,3 @@ class DecisionInput(serializers.Serializer):
         choices=[ReviewItem.Status.APPROVED, ReviewItem.Status.REJECTED]
     )
     note = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
-
-
-class LoginInput(serializers.Serializer):
-    username = serializers.CharField(max_length=150)
-    password = serializers.CharField(max_length=128, trim_whitespace=False)
-    role = serializers.ChoiceField(choices=["operator", "customer"], default="operator")
