@@ -157,6 +157,17 @@ class McpGatewayTests(TestCase):
         assert response.status_code == 409
         assert self.server.executed == []
 
+    def test_a_hand_off_rejects_waiting_confirmations(self):
+        send(self.user, "Скасуйте підписку, не хочу автопродовження")
+        send(self.user, "Хочу поговорити з людиною")
+
+        pending = ProductConfirmation.objects.get(customer=self.user)
+        assert pending.status == ProductConfirmation.Status.REJECTED
+        assert (
+            self.client_for(self.user).get("/api/review/my/chat/").json()["pendingConfirmation"]
+            is None
+        )
+
     def test_unreachable_product_goes_to_a_human(self):
         self.server.down = True
         chat = send(self.user, "Оплатив Plus, а тариф досі Free")

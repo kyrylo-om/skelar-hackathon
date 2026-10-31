@@ -158,6 +158,12 @@ class McpGateway:
         token = self.token()
         return _facts(self._read(token, "/subscription"), self._read(token, "/payments"))
 
+    def hand_off(self) -> int:
+        """The chat moved to a human: no confirm button the AI produced may run any more."""
+        return ProductConfirmation.objects.filter(
+            customer=self.user, status=ProductConfirmation.Status.AWAITING
+        ).update(status=ProductConfirmation.Status.REJECTED)
+
     @contextmanager
     def turn(self, label: str = ""):
         """No lease is needed: a proposal runs at most once on the server."""

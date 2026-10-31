@@ -28,6 +28,7 @@ class ProductConfirmation(models.Model):
         CONFIRMING = "confirming"
         DONE = "succeeded"
         FAILED = "failed"
+        REJECTED = "rejected"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     customer = models.ForeignKey(
