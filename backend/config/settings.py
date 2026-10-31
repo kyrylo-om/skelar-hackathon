@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local
     "apps.core",
+    "apps.support",
 ]
 
 MIDDLEWARE = [
@@ -86,6 +87,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
 }
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
