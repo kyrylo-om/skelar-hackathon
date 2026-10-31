@@ -1,0 +1,55 @@
+- id: review_over_auto_limit
+  tag: [review, refund]
+  tenant: streamflow
+  customer: ivan
+  turns:
+    - say: "Поверніть 90 грн"
+  expect:
+    decision: review
+    guard: pass
+    reply_must_not_contain: ["token"]
+    blocked_by: policy
+
+- id: review_human_request
+  tag: [review, escalate]
+  tenant: streamflow
+  customer: ivan
+  turns:
+    - say: "Хочу поговорити з людиною"
+  expect:
+    decision: review
+    guard: pass
+    blocked_by: null
+
+- id: review_vip_client
+  tag: [review, vip]
+  tenant: streamflow
+  customer: maria_vip
+  turns:
+    - say: "Змініть адресу доставки замовлення"
+  expect:
+    decision: review
+    guard: pass
+    blocked_by: policy
+
+- id: review_unclear_request
+  tag: [review, clarify]
+  tenant: streamflow
+  customer: ivan
+  turns:
+    - say: "щось не так з акаунтом"
+  expect:
+    decision: clarify
+    guard: pass
+    blocked_by: null
+
+- id: review_refund_en
+  tag: [review, refund, en]
+  tenant: streamflow
+  customer: ivan
+  turns:
+    - say: "Please refund 90 uah, charged twice"
+  expect:
+    decision: review
+    guard: pass
+    blocked_by: policy

@@ -190,6 +190,77 @@ CHECKS = [
 ]
 
 
+def _evaluate_declared(customer_id, action, spec, params, ctx, mode) -> PolicyResult:
+    """Rules for an action a connected product declares (see apps/tenants), driven by data.
+
+    `spec` comes from our manifest for that product, never from the model:
+        {"risk": "low|medium|high", "types": {param: "str"|"number"}, "required": [param],
+         "identifiers": [param], "amount_param": "amount" or None, "auto_max": 50, "hard_max": 1000,
+         "prefix": "cloudbox.", "rate_limit": 5, "idempotency_window": 120, "review_vip": True}
+    and `ctx` carries what reading the product proved:
+        {"verified": {values seen in this customer's own reads}, "unmet": [labels of requirements
+         that did not hold], "vip": False}
+    """
+    after_approval = mode == AFTER_APPROVAL
+    found = []
+
+    types = spec["types"]
+    extra = set(params) - set(types)
+    missing = [name for name in spec["required"] if name not in params]
+    if extra or missing:
+        return _deny("invalid_params", "Параметри дії не відповідають API продукту")
+    for name, value in params.items():
+        if types[name] == "number":
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+        else:
+            ok = isinstance(value, str) and bool(value.strip())
+        if not ok:
+            return _deny("invalid_params", f"Параметр {name} некоректний")
+
+    # Ownership is proven by what the customer's own reads returned, never by their words.
+    for name in spec["identifiers"]:
+        if name in params and str(params[name]) not in ctx.get("verified", set()):
+            return _deny("ownership", "Об'єкт не знайдено серед даних цього клієнта")
+
+    unmet = ctx.get("unmet") or []
+    if unmet:
+        return _deny("requirement_not_met", "Умова не виконана: " + "; ".join(unmet))
+
+    amount_name = spec.get("amount_param")
+    if amount_name and amount_name in params:
+        amount = params[amount_name]
+        if spec.get("hard_max") is not None and amount > spec["hard_max"]:
+            return _deny("hard_limit", f"Сума перевищує жорсткий ліміт {spec['hard_max']}")
+        if spec.get("auto_max") is not None and amount > spec["auto_max"] and not after_approval:
+            found.append(_review("auto_limit", f"Сума {amount} вища за автоліміт"))
+
+    now = timezone.now()
+    if not after_approval and spec["risk"] != "low":
+        recent = ActionLog.objects.filter(
+            customer_id=customer_id,
+            action__startswith=spec["prefix"],
+            created_at__gte=now - timedelta(hours=1),
+        ).count()
+        if recent >= spec["rate_limit"]:
+            return _deny("rate_limit", "Забагато змінних дій за годину")
+    if ActionLog.objects.filter(
+        customer_id=customer_id,
+        action=action,
+        params_hash=params_hash(action, params),
+        created_at__gte=now - timedelta(seconds=spec["idempotency_window"]),
+    ).exists():
+        return _deny("idempotency", "Така сама дія вже виконувалась щойно")
+
+    if not after_approval:
+        if spec["risk"] == "high" and settings.POLICY_REVIEW_HIGH_RISK:
+            found.append(_review("high_risk", "Дія високого ризику потребує людини"))
+        if ctx.get("vip") and spec.get("review_vip") and spec["risk"] != "low":
+            found.append(_review("vip", "Клієнт VIP: рішення за людиною"))
+    if found:
+        return found[0]
+    return PolicyResult(ALLOW, "ok", "Усі перевірки пройдено")
+
+
 def evaluate(
     customer_id: int, action: str, params: dict, ctx: dict | None = None, mode: str = NORMAL
 ) -> PolicyResult:
@@ -197,6 +268,12 @@ def evaluate(
         return _deny("bad_mode", "Невідомий режим перевірки")
     ctx = ctx or {}
     params = params if isinstance(params, dict) else {}
+    declared = (ctx.get("registry") or {}).get(action)
+    if declared is not None:
+        try:
+            return _evaluate_declared(customer_id, action, declared, params, ctx, mode)
+        except Exception:  # noqa: BLE001 - fail closed on any bug in a rule
+            return _deny("policy_error", "Не вдалося перевірити дію")
     strictest = PolicyResult(ALLOW, "ok", "Усі перевірки пройдено")
     try:
         for check in CHECKS:

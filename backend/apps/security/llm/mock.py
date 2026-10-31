@@ -124,12 +124,31 @@ def _responder(user: str) -> dict:
     return {"text": texts.get(context.get("decision"), texts["review"])}
 
 
+def _agent(user: str) -> dict:
+    context = _json_after(user, "CONTEXT")
+    observations = context.get("observations") or []
+    endpoints = context.get("available_endpoints") or []
+    if not observations:
+        for ep in endpoints:
+            if ep.get("kind") == "read" or ep.get("method") == "GET":
+                path = ep.get("path", "")
+                if "{" not in path:
+                    return {
+                        "type": "call",
+                        "endpoint": ep.get("id"),
+                        "params": {},
+                        "why": "Read initial facts",
+                    }
+    return {"type": "final", "reply": "Інформацію перевірено."}
+
+
 HANDLERS = {
     "guard": _guard,
     "triage": _triage,
     "actor": _actor,
     "critic": _critic,
     "responder": _responder,
+    "agent": _agent,
 }
 
 

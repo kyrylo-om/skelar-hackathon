@@ -30,6 +30,8 @@ INSTALLED_APPS = [
     "apps.review",
     "apps.security",
     "apps.orchestrator",
+    "apps.tenants",
+    "evals",
 ]
 
 MIDDLEWARE = [
@@ -133,3 +135,11 @@ if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
 ORCHESTRATOR_ENABLED = env.bool("ORCHESTRATOR_ENABLED", default=True)
 # The Responder LLM writes every reply from the customer's facts; the manifest text is the fallback.
 ORCHESTRATOR_LLM_RESPONDER = env.bool("ORCHESTRATOR_LLM_RESPONDER", default=True)
+
+# Connected products: our rules per product live in TENANTS_DIR/<tenant>/manifest.yaml.
+TENANTS_DIR = BASE_DIR / "tenants"
+TENANT_AGENT_MAX_STEPS = env.int("TENANT_AGENT_MAX_STEPS", default=6)
+# The execution server (MCP) every product call goes through, and the secrets it shares with us.
+EXECUTION_URL = env("EXECUTION_URL", default="http://127.0.0.1:9000")
+EXECUTION_SERVICE_KEY = env("EXECUTION_SERVICE_KEY", default="")
+EXECUTION_REPO_PATH = env("EXECUTION_REPO_PATH", default=str(BASE_DIR.parent))
