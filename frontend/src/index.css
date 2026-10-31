@@ -2,8 +2,401 @@
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color-scheme: light dark;
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --text: #1c1e21;
+  --muted: #6b7280;
+  --border: #e2e5e9;
+  --accent: #2563eb;
+  --ok: #15803d;
+  --bad: #b91c1c;
+  --warn: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a;
+    --panel: #1f2226;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #2f3338;
+    --accent: #60a5fa;
+    --ok: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.1rem;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.loading {
+  padding: 2rem;
+  color: var(--muted);
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 320px 1fr 280px;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+}
+
+/* список чатів */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.list ul,
+.trace ol,
+.messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.item:hover {
+  background: var(--bg);
+}
+
+.item.selected {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.item-subject {
+  font-size: 0.9rem;
+}
+
+.item-meta {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.prio {
+  color: var(--bad);
+}
+
+.empty {
+  color: var(--muted);
+  padding: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.badge.needs_review {
+  color: var(--bad);
+}
+
+.badge.ai_handling {
+  color: var(--warn);
+}
+
+.badge.resolved {
+  color: var(--ok);
+}
+
+/* переписка */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.view > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.summary {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.review {
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.review.approved {
+  border-color: var(--ok);
+}
+
+.review.rejected {
+  border-color: var(--bad);
+}
+
+.review-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.risk.high {
+  color: var(--bad);
+}
+
+.risk.medium {
+  color: var(--warn);
+}
+
+.risk.low {
+  color: var(--ok);
+}
+
+code {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions button {
+  border: 0;
+  border-radius: 6px;
+  padding: 0.4rem 1rem;
+  color: #fff;
+}
+
+.approve {
+  background: #15803d;
+}
+
+.reject {
+  background: #b91c1c;
+}
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.msg {
+  max-width: 80%;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+
+.msg.customer {
+  align-self: flex-start;
+}
+
+.msg.ai,
+.msg.operator {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+
+.msg.system {
+  align-self: center;
+  max-width: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: transparent;
+}
+
+.msg-role {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.msg time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.reply {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reply input {
+  flex: 1;
+}
+
+.reply button {
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  padding: 0 1rem;
+}
+
+/* trace */
+.trace h2 {
+  margin-bottom: 0.5rem;
+}
+
+.trace li {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.trace .mark {
+  width: 1.2rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.trace .pass .mark {
+  color: var(--ok);
+}
+
+.trace .block .mark {
+  color: var(--bad);
+}
+
+.trace p {
+  color: var(--muted);
+}
+
+@media (max-width: 1000px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }
