@@ -30,6 +30,9 @@ INSTALLED_APPS = [
     "apps.review",
     "apps.security",
     "apps.orchestrator",
+    "apps.tenants",
+    "evals",
+    "apps.widget",
 ]
 
 MIDDLEWARE = [
@@ -134,17 +137,23 @@ ORCHESTRATOR_ENABLED = env.bool("ORCHESTRATOR_ENABLED", default=True)
 # The Responder LLM writes every reply from the customer's facts; the manifest text is the fallback.
 ORCHESTRATOR_LLM_RESPONDER = env.bool("ORCHESTRATOR_LLM_RESPONDER", default=True)
 
-# Which product the pipeline acts on: "dev" is the built-in domain (apps.subscriptions and
-# apps.support); "mcp" is an external product behind the execution server (execution/ at the
-# repository root).
+# Connected products: our rules per product live in TENANTS_DIR/<tenant>/manifest.yaml.
+TENANTS_DIR = BASE_DIR / "tenants"
+TENANT_AGENT_MAX_STEPS = env.int("TENANT_AGENT_MAX_STEPS", default=6)
+# The execution server (MCP) every product call goes through, and the secrets it shares with us.
 ORCHESTRATOR_GATEWAY = env("ORCHESTRATOR_GATEWAY", default="dev")
 EXECUTION_URL = env("EXECUTION_URL", default="http://127.0.0.1:9000")
 EXECUTION_TENANT = env("EXECUTION_TENANT", default="cloudbox")  # its key in products.toml
 EXECUTION_SECRET = env("EXECUTION_SECRET", default="")  # signs customer tokens; never logged
 EXECUTION_SERVICE_KEY = env("EXECUTION_SERVICE_KEY", default="")
+EXECUTION_REPO_PATH = env("EXECUTION_REPO_PATH", default=str(BASE_DIR.parent))
 # Our username -> the customer's id in the product. Defaults map the seed_demo accounts onto the
 # cloudbox mock (same situations: unapplied payment, Pro with renewal, double charge).
 EXECUTION_CUSTOMERS = env.dict(
     "EXECUTION_CUSTOMERS",
     default={"paid_plus": "c-101", "active_pro": "c-102", "refund_review": "c-103"},
 )
+
+# The embeddable widget (apps.widget): each product signs its customers' widget tokens with its own
+# secret, never with EXECUTION_SECRET. Format: WIDGET_SECRETS=cloudbox=...,shopx=...
+WIDGET_SECRETS = env.dict("WIDGET_SECRETS", default={})

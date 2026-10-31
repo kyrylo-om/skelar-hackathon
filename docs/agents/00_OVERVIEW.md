@@ -135,10 +135,11 @@ Gate: будь-який `deny` дає `block`; будь-який `needs_review` 
 - **Оркестратор** (`pipeline.py`): Triage, Actor, Responder підключені до чату клієнта, перевірка плану
   (`plan.py`), шлюз до продукту (`gateway.py`), режим `after_human_approval`, добовий ліміт повернень, перевірка
   підтвердженого платежу, історія розмови для агентів, загальний дедлайн 30 с на повідомлення.
+- **Tenant Agent** (`apps/tenants`, [11_TENANT_AGENT.md](11_TENANT_AGENT.md)): цикл читання API підключених продуктів,
+  декларативні правила безпеки `manifest.yaml` (CloudBox, ShopX), журнал `ApiCall`, виконання дій через execution server.
 - Детальний опис: [10_ORCHESTRATOR.md](10_ORCHESTRATOR.md).
 
-Ще немає: читання реєстру дій і порогів з маніфесту (реєстр у `policy.py`, маніфест у `manifest.py` як Python), окремі
-політики-файли `plans/billing/cancellation/refunds`, підключення MCP-мок-продуктів, QA-метрики. Те, що описано в
+Ще немає: окремі політики-файли `plans/billing/cancellation/refunds`, QA-метрики. Те, що описано в
 наступних файлах і відрізняється від коду, позначене **[узгодити]**.
 
 ## 5. Індекс
@@ -154,6 +155,8 @@ Gate: будь-який `deny` дає `block`; будь-який `needs_review` 
 | [07_HUMAN_REVIEW.md](07_HUMAN_REVIEW.md) | Черга людини |
 | [08_MANIFEST.md](08_MANIFEST.md) | Маніфест tenant-а |
 | [09_ATTACKS.md](09_ATTACKS.md) | Каталог атак |
+| [10_ORCHESTRATOR.md](10_ORCHESTRATOR.md) | Оркестратор конвеєра |
+| [11_TENANT_AGENT.md](11_TENANT_AGENT.md) | Підключення продуктів (Tenant Agent) |
 
 ## 6. Відкриті питання
 

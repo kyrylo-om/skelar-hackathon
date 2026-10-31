@@ -3,4 +3,5 @@ djangorestframework==3.18.3
 django-cors-headers==4.9.0
 django-environ==0.14.0
 openai==3.19.2
+PyYAML==6.0.3
 mcp==2.3.0

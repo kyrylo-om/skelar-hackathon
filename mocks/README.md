@@ -44,6 +44,9 @@ answers 404, like a missing one.
   The schema the agent reads and the one the product runs on cannot drift apart.
 - `app.py` is the Starlette API from the context's API table, plus the portal routes.
 - `portal.html` is the product's own customer page, plain HTML and JS.
+- Every portal also signs tokens for our support widget at `POST /support/token`
+  (secret `<NAME>_WIDGET_SECRET`, default `<name>-widget-dev-secret`); see
+  [../widget/DESIGN.md](../widget/DESIGN.md). The CloudBox portal embeds the widget.
 
 Adding a product: copy a folder, rewrite those four files, add a `__main__.py` port and an
 entry in `execution/products.toml`.

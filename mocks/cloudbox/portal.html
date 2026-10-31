@@ -114,9 +114,9 @@ function show(signedIn) {
 
 $('enter').onclick = async () => {
   await api('/portal/login', { method: 'POST', body: JSON.stringify({ customer_id: $('customers').value }) });
-  refresh();
+  location.reload(); // the support widget picks up the new customer on load
 };
-$('logout').onclick = async () => { await api('/portal/logout', { method: 'POST' }); show(false); };
+$('logout').onclick = async () => { await api('/portal/logout', { method: 'POST' }); location.reload(); };
 
 api('/portal/customers').then((list) => {
   for (const c of list) $('customers').add(new Option(`${c.name} (${c.id})`, c.id));
@@ -124,5 +124,7 @@ api('/portal/customers').then((list) => {
 refresh();
 setInterval(() => { if (!$('account').hidden) refresh(); }, 3000);
 </script>
+<!-- Our support widget, the way any product embeds it (dev server: widget/, npm run dev). -->
+<script src="http://127.0.0.1:5174/widget.js" data-product="cloudbox" data-token-url="/support/token"></script>
 </body>
 </html>

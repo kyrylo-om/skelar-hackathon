@@ -1,176 +1,164 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ApiError, api, apiErrorMessage, isCsrfFailure } from './api/client'
-import Trace from './Trace'
+import { useCallback, useRef, useState } from 'react'
+import { api, ApiError } from './api/client'
+import { describeError, readDetail, readQueue } from './api/operator'
+import usePolling from './api/usePolling'
+import Queue from './components/Queue'
+import Conversation from './components/Conversation'
+import DecisionPanel from './components/DecisionPanel'
+import Approvals from './pages/Approvals'
+import ActionsLog, { ConversationAudit } from './pages/ActionsLog'
+import ApiCalls from './pages/ApiCalls'
+import Security from './pages/Security'
+import Analytics from './pages/Analytics'
+import Integration from './pages/Integration'
+import './styles/inbox.css'
 
-const STATUS = { needs_review: 'Чекає людину', ai_handling: 'AI веде', resolved: 'Вирішено' }
-const PRIO = { high: 'Високий', normal: 'Звичайний', low: 'Низький' }
-const ROLE = { customer: 'Клієнт', ai: 'AI', operator: 'Оператор', system: 'Система' }
-const RISK = { high: 'високий', medium: 'середній', low: 'низький' }
-const POLL_MS = 5000
-
-const clock = (iso) =>
-  new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
-export default function Operator({ onSessionExpired }) {
-  const [chats, setChats] = useState([])
-  const [audit, setAudit] = useState([])
-  const [id, setId] = useState(null)
-  const [detail, setDetail] = useState(null)
-  const [query, setQuery] = useState('')
-  const [showAll, setShowAll] = useState(false)
-  const [reply, setReply] = useState('')
-  const [why, setWhy] = useState('')
+export default function Operator({ user, page = 'inbox', onNavigate, onSessionExpired }) {
+  const [source, setSource] = useState(user.is_staff ? 'support' : 'review')
+  const [selections, setSelections] = useState({})
+  const [drafts, setDrafts] = useState({})
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [notice, setNotice] = useState(null)
+  const [uncertain, setUncertain] = useState({})
+  const [panel, setPanel] = useState('queue')
+  const lock = useRef(false)
+  const messageAttempts = useRef({})
+  const unknownRequests = useRef({})
+  const loadQueue = useCallback(async (signal) => {
+    const rows = await readQueue(source, signal)
+    if (!signal.aborted && rows.length) {
+      setSelections((previous) => previous[source] != null ? previous : { ...previous, [source]: rows[0].id })
+    }
+    return rows
+  }, [source])
+  const queue = usePolling(loadQueue, 10000, onSessionExpired, page === 'inbox')
+  const activeId = selections[source] ?? queue.data?.[0]?.id ?? null
+  const activeKey = activeId == null ? null : `${source}:${activeId}`
+  const loadDetail = useCallback((signal) => activeId == null ? Promise.resolve(null) : readDetail(source, activeId, signal), [source, activeId])
+  const detail = usePolling(loadDetail, 5000, onSessionExpired, activeId != null && page === 'inbox')
+  const row = queue.error ? null : queue.data?.find((item) => String(item.id) === String(activeId))
 
-  // Until the operator picks a chat, show the first one that needs a human.
-  const activeId = id ?? (chats.find((c) => c.status === 'needs_review') ?? chats[0])?.id ?? null
-
-  // A 403 means the session is gone or the user lost operator rights; a failed CSRF check is
-  // also a 403, but the session is fine, so only report it.
-  const fail = useCallback(
-    (err) => {
-      if (err instanceof ApiError && err.status === 403 && !isCsrfFailure(err)) onSessionExpired?.()
-      else setError(apiErrorMessage(err))
-    },
-    [onSessionExpired],
-  )
-
-  const refresh = useCallback(() => {
-    Promise.all([api.get('/review/chats/'), api.get('/review/audit/')])
-      .then(([list, log]) => {
-        setChats(list)
-        setAudit(log)
-        setError('')
-      })
-      .catch(fail)
-    if (activeId !== null) api.get(`/review/chats/${activeId}/`).then(setDetail).catch(fail)
-  }, [activeId, fail])
-
-  useEffect(() => {
-    refresh()
-    const timer = setInterval(refresh, POLL_MS)
-    return () => clearInterval(timer)
-  }, [refresh])
-
-  const run = async (request) => {
+  const reconcile = async () => {
+    if (lock.current) return
+    lock.current = true
     setBusy(true)
-    setError('')
+    const key = activeKey
+    const pending = uncertain[key]
     try {
-      setDetail(await request())
-      refresh()
-      return true
-    } catch (err) {
-      fail(err)
-      return false
+      const [snapshot, rows] = await Promise.all([detail.refresh(), queue.refresh()])
+      if (snapshot?.key !== key || !Array.isArray(rows)) {
+        setNotice({ key, kind: 'error', text: 'Не вдалося звірити стан. Повтор операції залишається заблокованим.' })
+        return
+      }
+      const freshRow = rows.find((item) => item.key === key)
+      const knownResult = (pending?.kind === 'claim' && snapshot.status === 'operator' && String(freshRow?.assignedOperatorId) === String(user.id))
+        || (pending?.kind === 'resolve' && snapshot.status === 'resolved')
+        || (pending?.kind === 'decision' && snapshot.review?.id === pending.reviewId && ['approved', 'rejected'].includes(snapshot.review.status))
+      if (knownResult) {
+        setUncertain((previous) => ({ ...previous, [key]: null }))
+        delete unknownRequests.current[key]
+        setNotice({ key, kind: 'success', text: 'Серверний стан звірено. Актуальний результат показано в діалозі.' })
+      } else {
+        const retryable = source === 'support' || pending?.kind === 'decision'
+        setUncertain((previous) => ({ ...previous, [key]: { ...previous[key], checked: retryable } }))
+        setNotice({ key, kind: 'warning', text: retryable ? 'Стан звірено. Автоматичного повтору немає. За потреби повторіть той самий запит з незмінним ID.' : 'Стан звірено. API відповіді AI review не підтримує ідемпотентність або перевірку результату за ID; автоматичний і ручний повтор запиту заблоковані. Потрібна перевірка командою.' })
+      }
+    } finally { lock.current = false; setBusy(false) }
+  }
+
+  const run = async (kind, request, afterSuccess, replay = false) => {
+    if (lock.current || (uncertain[activeKey] && !replay)) return
+    lock.current = true
+    setBusy(true)
+    const operationKey = activeKey
+    let mutationSent = kind !== 'decision'
+    setNotice(null)
+    try {
+      await request(AbortSignal.timeout(20000), () => { mutationSent = true })
+      afterSuccess?.()
+      setUncertain((previous) => ({ ...previous, [operationKey]: null }))
+      delete unknownRequests.current[operationKey]
+      setNotice({ key: operationKey, kind: 'success', text: kind === 'reply' ? 'Відповідь збережено сервером.' : kind === 'claim' ? 'Звернення прийнято в роботу.' : kind === 'decision' ? 'Рішення review збережено сервером. Перевірте оновлений стан.' : 'Звернення закрито.' })
+    } catch (error) {
+      const failure = await describeError(error, onSessionExpired)
+      const unknown = mutationSent && (!(error instanceof ApiError) || error.status >= 500)
+      if (unknown) {
+        unknownRequests.current[operationKey] = { kind, request, afterSuccess }
+        setUncertain((previous) => ({ ...previous, [operationKey]: { kind, checked: false, reviewId: detail.data?.review?.id } }))
+      } else if (replay) setUncertain((previous) => ({ ...previous, [operationKey]: null }))
+      setNotice({ key: operationKey, kind: failure.kind, text: error instanceof ApiError && error.status === 409 ? 'Стан звернення змінився. Дані оновлено; перевірте призначення й повторіть доступну дію.' : `${failure.message}${unknown ? ' Результат операції невідомий; повтор заблоковано до звірки.' : ''}` })
     } finally {
+      await Promise.all([detail.refresh(), queue.refresh()])
+      lock.current = false
       setBusy(false)
     }
   }
 
-  const send = async () => {
-    if (await run(() => api.post(`/review/chats/${activeId}/reply/`, { text: reply }))) setReply('')
+  const send = () => {
+    const text = (drafts[activeKey] || '').trim()
+    if (!text) return
+    let attempt = messageAttempts.current[activeKey]
+    if (!attempt || attempt.text !== text) {
+      attempt = { text, client_message_id: crypto.randomUUID() }
+      messageAttempts.current[activeKey] = attempt
+    }
+    const key = activeKey
+    const path = source === 'support' ? `/operator/conversations/${activeId}/messages/` : `/review/chats/${activeId}/reply/`
+    const body = source === 'support' ? attempt : { text }
+    void run('reply', (signal) => api.post(path, body, { signal }), () => {
+      setDrafts((previous) => ({ ...previous, [key]: '' }))
+      delete messageAttempts.current[key]
+    })
   }
-  const decide = async (decision) => {
-    if (await run(() => api.post(`/review/reviews/${detail.review.id}/decision/`, { decision, note: why }))) setWhy('')
+
+  const decide = (decision, note) => {
+    const proposal = detail.data?.review
+    if (source !== 'review' || proposal?.status !== 'pending' || (decision === 'rejected' && !note.trim())) return
+    const sameProposal = (review) => JSON.stringify([review?.id, review?.action, review?.params, review?.risk, review?.reason])
+    void run('decision', async (signal, markSent) => {
+      const fresh = await detail.refresh()
+      if (!fresh || fresh.key !== activeKey) throw new Error('Не вдалося перечитати пропозицію. Рішення не надіслано.')
+      if (fresh.review?.status !== 'pending' || sameProposal(fresh.review) !== sameProposal(proposal)) {
+        throw new ApiError(409, { detail: 'Пропозиція змінилася. Перегляньте актуальні параметри.' })
+      }
+      markSent()
+      return api.post(`/review/reviews/${proposal.id}/decision/`, { decision, note: note.trim() }, { signal })
+    })
   }
 
-  const q = query.trim().toLowerCase()
-  const queue = chats
-    .filter((c) => showAll || c.status === 'needs_review')
-    .filter((c) => !q || c.customer.toLowerCase().includes(q) || c.subject.toLowerCase().includes(q))
-    .sort((a, b) => (b.priority === 'high') - (a.priority === 'high'))
+  const openReview = (id) => {
+    setSource('review')
+    setSelections((previous) => ({ ...previous, review: id }))
+    setPanel('decision')
+    onNavigate?.('inbox')
+  }
 
-  const count = (status) => chats.filter((c) => c.status === status).length
-  const review = detail?.review
-  const pending = review?.status === 'pending'
+  if (page === 'approvals') return <Approvals onOpen={openReview} onSessionExpired={onSessionExpired} />
+  if (page === 'actions') return <ActionsLog onOpen={openReview} onSessionExpired={onSessionExpired} />
+  if (page === 'calls') return <ApiCalls />
+  if (page === 'security') return <Security />
+  if (page === 'analytics') return <Analytics />
+  if (page === 'integration') return <Integration />
 
-  return (
-    <div className="operator">
-      <div className="metrics">
-        <div><b>{chats.length}</b><span>усього чатів</span></div>
-        <div className={count('needs_review') ? 'danger' : ''}><b>{count('needs_review')}</b><span>чекають перевірки</span></div>
-        <div><b>{count('ai_handling')}</b><span>веде AI</span></div>
-        <div><b>{count('resolved')}</b><span>вирішено</span></div>
-        <div><b>{audit.filter((a) => a.event.startsWith('review_')).length}</b><span>рішень людини</span></div>
-      </div>
-      {error && <div className="tag bad">{error}</div>}
-      <div className="cols">
-        <aside className="queue">
-          <div className="col-head">
-            <b>Черга</b>
-            <label className="muted"><input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> усі чати</label>
-          </div>
-          <div className="pad">
-            <input placeholder="Пошук за клієнтом або темою" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Пошук" />
-          </div>
-          {queue.length === 0 && <div className="muted pad">Нічого немає</div>}
-          {queue.map((c) => (
-            <button key={c.id} className={'q-item' + (c.id === activeId ? ' active' : '')} onClick={() => { setId(c.id); setDetail(null) }}>
-              <span><b>{c.customer}</b></span>
-              <span className="muted">{c.subject}</span>
-              <span className="muted">{STATUS[c.status]} · <span className={c.priority === 'high' ? 'prio' : ''}>{PRIO[c.priority]}</span></span>
-            </button>
-          ))}
-        </aside>
-
-        <section className="dialog">
-          {!detail ? (
-            <div className="muted pad">Оберіть чат</div>
-          ) : (
-            <>
-              <div className="col-head"><b>{detail.customer}</b><span className="muted">{STATUS[detail.status]}</span></div>
-              <div className="chat small">
-                {detail.messages.map((m) => (
-                  <div key={m.id} className={'msg ' + m.role}>
-                    <div className="who">{ROLE[m.role]} · {clock(m.at)}</div>
-                    <div className="bubble">{m.text}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="reply">
-                <textarea value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Відповідь клієнту в цьому ж чаті…" rows={3} aria-label="Відповідь клієнту" />
-                <div className="row">
-                  <button onClick={send} disabled={busy || !reply.trim()}>Відповісти</button>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
-
-        <aside className="ai-panel">
-          <div className="col-head"><b>Рішення AI</b></div>
-          {detail && (
-            <>
-              <div className="card">
-                <div className="muted">Підсумок</div>
-                <p>{detail.summary || 'Звернення поки без ескалації.'}</p>
-                {pending && <div className="tag warn">Чому до людини: {review.reason}</div>}
-              </div>
-              {review && (
-                <div className={'card' + (pending ? ' pending' : '')}>
-                  <div className="muted">{pending ? 'Дія очікує рішення' : review.status === 'approved' ? 'Схвалено' : 'Відхилено'}{review.decidedBy && ` · ${review.decidedBy}`}</div>
-                  <div><b>{review.action}</b> <code>{JSON.stringify(review.params)}</code></div>
-                  <div className="muted">Ризик: {RISK[review.risk]}</div>
-                  {pending && (
-                    <>
-                      <input className="why" placeholder="Коментар до рішення" value={why} onChange={(e) => setWhy(e.target.value)} aria-label="Коментар" />
-                      <div className="row">
-                        <button disabled={busy} onClick={() => decide('approved')}>Схвалити</button>
-                        <button className="danger-btn" disabled={busy} onClick={() => decide('rejected')}>Відхилити</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              <div className="card"><div className="muted">Trace агентів</div><Trace steps={detail.trace} compact /></div>
-            </>
-          )}
-        </aside>
-      </div>
-      <details className="audit"><summary>Аудит-лог ({audit.length})</summary>
-        {audit.map((a) => <div key={a.id} className="muted">{clock(a.at)} · {a.chat ? `#${a.chat} · ` : ''}{a.actor ?? 'система'} · {a.event}</div>)}
-      </details>
+  return <div className="inbox-workspace">
+    <div className="source-notice small muted">Операторські звернення та AI review — окремі серверні діалоги без спільного ID.</div>
+    {(notice?.key === activeKey || uncertain[activeKey]) && <div className={`notice ${notice?.key === activeKey ? notice.kind : 'warning'}`} role="status">
+      {notice?.key === activeKey ? notice.text : 'Результат попередньої операції невідомий. Звірте стан із сервером.'}
+      {uncertain[activeKey] && <div className="row">
+        <button className="ghost" disabled={busy} onClick={reconcile}>Звірити стан</button>
+        {uncertain[activeKey].checked && <button disabled={busy} onClick={() => {
+          const pending = unknownRequests.current[activeKey]
+          if (pending) void run(pending.kind, pending.request, pending.afterSuccess, true)
+        }}>Повторити з тим самим ID</button>}
+      </div>}
+    </div>}
+    <nav className="mobile-panels tabs" aria-label="Панелі звернення">{[['queue', 'Черга'], ['conversation', 'Звернення'], ['decision', 'Рішення']].map(([key, title]) => <button className="ghost" key={key} aria-pressed={panel === key} onClick={() => setPanel(key)}>{title}</button>)}</nav>
+    <div className="inbox-columns" data-panel={panel}>
+      <Queue source={source} onSource={setSource} resource={queue} selectedId={activeId} user={user} onSelect={(id) => { setSelections((previous) => ({ ...previous, [source]: id })); setPanel('conversation') }} />
+      <Conversation resource={detail} row={row} user={user} draft={drafts[activeKey] || ''} onDraft={(text) => setDrafts((previous) => ({ ...previous, [activeKey]: text }))} onSend={send} busy={busy} uncertain={uncertain[activeKey]}
+        onClaim={() => run('claim', (signal) => api.post(`/operator/conversations/${activeId}/claim/`, {}, { signal }))}
+        onResolve={() => run('resolve', (signal) => api.post(`/operator/conversations/${activeId}/resolve/`, {}, { signal }))} />
+      <DecisionPanel key={activeKey} resource={detail} busy={busy} uncertain={uncertain[activeKey]} onDecide={decide} history={source === 'review' && activeId != null ? <ConversationAudit chatId={activeId} onSessionExpired={onSessionExpired} /> : null} />
     </div>
-  )
+  </div>
 }

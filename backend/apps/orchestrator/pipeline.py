@@ -88,17 +88,25 @@ def _summary(masked: str, intent: str, reason: str) -> str:
     )
 
 
-def _review_request(action: str, params: dict, reason: str) -> dict:
+def _review_request(action: str, params: dict, reason: str, risk: str | None = None) -> dict:
     return {
         "action": action,
         "params": params,
-        "risk": policy.ACTIONS.get(action, {}).get("risk", "high"),
+        "risk": risk or policy.ACTIONS.get(action, {}).get("risk", "high"),
         "reason": reason,
     }
 
 
 def _handoff(
-    manifest, trace, masked, intent, priority, reason, action="escalate_to_human", params=None
+    manifest,
+    trace,
+    masked,
+    intent,
+    priority,
+    reason,
+    action="escalate_to_human",
+    params=None,
+    risk=None,
 ):
     trace = [*trace, trace_step("human", "needs_review", reason)]
     return Outcome(
@@ -108,7 +116,7 @@ def _handoff(
         intent,
         priority,
         reason,
-        review=_review_request(action, params or {"reason": reason}, reason),
+        review=_review_request(action, params or {"reason": reason}, reason, risk=risk),
         summary=_summary(masked, intent, reason),
         reset_clarifications=True,
     )
@@ -296,6 +304,92 @@ def _execute(user, chat, plan, facts, masked, intent, priority, manifest, trace,
     return Outcome("execute", reply, trace, intent, priority, reset_clarifications=True)
 
 
+def _run_tenant(chat, user, masked, state, manifest, turn, session, history, trace) -> Outcome:
+    from apps.tenants import agent_loop
+    from apps.tenants.endpoints import EndpointError
+
+    esc = manifest.escalation
+    lowered = masked.lower()
+    if any(term in lowered for term in esc.legal_terms):
+        return _handoff(manifest, trace, masked, "legal_threat", "high", "legal threat")
+    human_terms = getattr(esc, "human_terms", ())
+    if any(term in lowered for term in human_terms) or "людин" in lowered or "оператор" in lowered:
+        return _handoff(manifest, trace, masked, "human_request", "normal", "human requested")
+
+    res = agent_loop.run(session, masked, history)
+    trace = [*trace, *res.trace]
+
+    if res.kind == "final":
+        turn.facts = {"observations": session.observations}
+        return Outcome("execute", res.reply, trace, intent="general", reset_clarifications=True)
+
+    if res.kind == "ask_user":
+        return Outcome("clarify", res.question, trace, intent="clarify")
+
+    if res.kind == "escalate":
+        return _handoff(manifest, trace, masked, "tenant_escalate", "normal", res.reason)
+
+    if res.kind == "write":
+        write = res.write
+        endpoint = write["endpoint"]
+        path_params = write["path_params"]
+        body = write["body"]
+        why = write["why"]
+        try:
+            plan, ctx = session.prepare_write(endpoint, path_params, body, why)
+        except EndpointError as exc:
+            return _handoff(manifest, trace, masked, "invalid_write", "normal", str(exc))
+        ctx["history"] = history
+        result = gate_plan(user.pk, masked, plan, ctx, trace, record=False)
+        if result.decision == BLOCK:
+            return Outcome(
+                "block",
+                manifest.responses["block"],
+                result.trace,
+                "change",
+                "normal",
+                result.reason,
+            )
+        if result.decision == REVIEW:
+            action_name = plan["actions"][0]["name"]
+            action_params = plan["actions"][0]["params"]
+            risk = ctx["registry"][action_name]["risk"]
+            return _handoff(
+                manifest,
+                result.trace,
+                masked,
+                "change",
+                "normal",
+                result.reason,
+                action=action_name,
+                params=action_params,
+                risk=risk,
+            )
+        if result.decision == EXECUTE:
+            outcome = session.execute_write(endpoint, path_params, body)
+            turn.outcomes = [outcome]
+            turn.facts = {
+                "summary": outcome.facts.get("summary", ""),
+                "observations": session.observations,
+            }
+            draft = f"Готово: {outcome.facts.get('summary', '')}"
+            reply = responder.compose(
+                "execute",
+                draft,
+                facts=turn.facts,
+                outcomes=turn.outcomes,
+                history=history,
+                masked_text=masked,
+                manifest=manifest,
+                language=turn.language,
+            )
+            return Outcome(
+                "execute", reply, result.trace, "change", "normal", reset_clarifications=True
+            )
+
+    return _handoff(manifest, trace, masked, "unknown", "normal", "unexpected agent loop result")
+
+
 def _run(chat, user, text, state, manifest, turn) -> Outcome:
     esc = manifest.escalation
     checked, step = screen_input(user.pk, text)
@@ -307,21 +401,41 @@ def _run(chat, user, text, state, manifest, turn) -> Outcome:
     masked = checked.masked_text
     turn.masked = masked
 
-    try:
-        facts = _gateway(user).load_facts()
-    except ProductUnavailable as exc:
-        reason = f"product unavailable: {exc}"
-        return _handoff(manifest, trace, masked, "unknown", "normal", reason)
-    ctx = product.policy_ctx(user, facts)
     history = _history(chat)
-    turn.facts, turn.history = facts, history
-    ctx["history"] = history  # the Critic reads it; Policy ignores it
-    ctx["pending_action"] = _pending_summary(user)  # a button the customer has not pressed
+    turn.history = history
 
     if _handed_off(chat):
         return Outcome(
             "review", manifest.responses["waiting"], trace, state.last_intent or "waiting"
         )
+
+    try:
+        from apps.tenants import runtime as tenants_runtime
+
+        session = tenants_runtime.session_for(user, chat)
+    except (ImportError, ModuleNotFoundError):
+        session = None
+    except Exception as exc:
+        if type(exc).__name__ == "TenantUnavailable":
+            return _handoff(manifest, trace, masked, "unknown", "high", "product unavailable")
+        raise
+    if session is not None:
+        return _run_tenant(chat, user, masked, state, manifest, turn, session, history, trace)
+
+    try:
+        if "_gateway" in globals():
+            facts = _gateway(user).load_facts()
+        else:
+            facts = product.load_facts(user)
+    except Exception as exc:
+        if type(exc).__name__ == "ProductUnavailable":
+            reason = f"product unavailable: {exc}"
+            return _handoff(manifest, trace, masked, "unknown", "normal", reason)
+        raise
+    ctx = product.policy_ctx(user, facts)
+    turn.facts = facts
+    ctx["history"] = history  # the Critic reads it; Policy ignores it
+    ctx["pending_action"] = _pending_summary(user)  # a button the customer has not pressed
 
     triage = _triage(masked, state, manifest, history)
     intent, priority = triage["intent"], triage["priority"]
@@ -431,6 +545,14 @@ def execute_approved(customer, action: str, params: dict) -> None:
     """Run an action a human approved. Policy checks it again first, with fresh facts."""
     if action == "escalate_to_human":
         return  # the human already has the conversation
+    if "." in action:
+        from apps.tenants.models import TenantCustomer
+
+        if TenantCustomer.objects.filter(user=customer).exists():
+            from apps.tenants import runtime as tenants_runtime
+
+            tenants_runtime.execute_approved(customer, action, params)
+            return
     gateway = _gateway(customer)
     try:
         facts = gateway.load_facts()
