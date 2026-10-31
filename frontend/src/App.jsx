@@ -1,58 +1,41 @@
-import { useEffect, useState } from 'react'
-import { api } from './api/client'
-import Client from './Client'
+import { useCallback, useEffect, useState } from 'react'
+import { api, apiErrorMessage, isSessionExpired } from './api/client'
+import AppShell from './components/AppShell'
+import { Skeleton } from './components/EmptyState'
 import Login from './Login'
 import Operator from './Operator'
 
 export default function App() {
-  const [role, setRole] = useState('customer')
+  const [page, setPage] = useState('inbox')
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const sessionExpired = useCallback(() => { setUser(null); setError('Сесія завершилася. Увійдіть знову.') }, [])
 
-  // /auth/csrf/ hands out the CSRF cookie; /me/ restores an existing session.
   useEffect(() => {
-    api
-      .get('/auth/csrf/')
-      .then(() => api.get('/me/'))
-      .then(setUser)
-      .catch(() => {})
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])
+    api.get('/auth/csrf/', { signal }).then(() => api.get('/me/', { signal })).then((profile) => {
+      if (!controller.signal.aborted) setUser(profile)
+    }).catch((err) => {
+      if (!controller.signal.aborted && !isSessionExpired(err)) setError(apiErrorMessage(err))
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [])
 
-  const logout = () => {
-    api.post('/auth/logout/', {}).finally(() => setUser(null))
+  const logout = async () => {
+    if (busy) return
+    setBusy(true)
+    try { await api.post('/auth/logout/', {}, { signal: AbortSignal.timeout(15000) }); setUser(null); setError('') }
+    catch (err) { if (isSessionExpired(err)) sessionExpired(); else setError(apiErrorMessage(err)) }
+    finally { setBusy(false) }
   }
 
   return (
-    <div className="app">
-      <header>
-        <div className="brand">SupportPilot</div>
-        <nav>
-          <button className={role === 'customer' ? 'on' : ''} onClick={() => setRole('customer')}>
-            Клієнт
-          </button>
-          <button className={role === 'reviewer' ? 'on' : ''} onClick={() => setRole('reviewer')}>
-            Оператор
-          </button>
-          {user && (
-            <button className="ghost" onClick={logout}>
-              Вийти ({user.username})
-            </button>
-          )}
-        </nav>
-      </header>
-      <main>
-        {role === 'customer' &&
-          (user && !user.is_staff ? (
-            <Client onSessionExpired={() => setUser(null)} />
-          ) : (
-            <Login key="customer" role="customer" onLogin={setUser} />
-          ))}
-        {role === 'reviewer' &&
-          (user?.is_staff ? (
-            <Operator onSessionExpired={() => setUser(null)} />
-          ) : (
-            <Login key="operator" role="operator" onLogin={setUser} />
-          ))}
-      </main>
-    </div>
+    <AppShell page={page} onNavigate={setPage} user={user} onLogout={logout} busy={busy}>
+      {error && <div className="notice error" role="alert">{error}</div>}
+      {loading ? <Skeleton label="Перевірка сесії" /> : !user ? <Login role="operator" onLogin={(profile) => { setUser(profile); setError('') }} /> : <Operator user={user} page={page} onNavigate={setPage} onSessionExpired={sessionExpired} />}
+    </AppShell>
   )
 }
