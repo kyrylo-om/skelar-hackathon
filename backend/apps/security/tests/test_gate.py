@@ -2,9 +2,9 @@ from unittest import mock
 
 from django.test import TestCase
 
-from apps.security import llm_stub
 from apps.security.contracts import BLOCK, CLARIFY, EXECUTE, REVIEW
 from apps.security.gate import gate
+from apps.security.llm import mock as llm_mock
 from apps.security.models import ActionLog, SecurityEvent
 
 ME = 7
@@ -74,9 +74,8 @@ class GateTests(TestCase):
         assert result.decision == REVIEW
 
     def test_critic_needing_a_human_goes_to_review(self):
-        with mock.patch.object(
-            llm_stub, "complete_json", return_value={"verdict": "needs_human", "reason": "?"}
-        ):
+        reply = '{"verdict": "needs_human", "reason": "?"}'
+        with mock.patch.object(llm_mock, "respond", return_value=reply):
             result = gate(ME, "Хочу поговорити з людиною", plan("escalate_to_human"), CTX)
         assert result.decision == REVIEW
 

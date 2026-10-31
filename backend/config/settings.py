@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import environ
@@ -101,3 +102,15 @@ RISKY_ACTIONS_PER_HOUR = env.int("RISKY_ACTIONS_PER_HOUR", default=5)
 IDEMPOTENCY_WINDOW_SEC = env.int("IDEMPOTENCY_WINDOW_SEC", default=120)
 POLICY_REVIEW_HIGH_RISK = env.bool("POLICY_REVIEW_HIGH_RISK", default=True)
 POLICY_REVIEW_VIP = env.bool("POLICY_REVIEW_VIP", default=True)
+
+# LLM. The key comes only from the environment (.env is git-ignored); never log or return it.
+LLM_PROVIDER = env("LLM_PROVIDER", default="mock")  # deepseek | mock
+LLM_API_KEY = env("LLM_API_KEY", default="")
+LLM_BASE_URL = env("LLM_BASE_URL", default="https://api.deepseek.com")
+LLM_MODEL = env("LLM_MODEL", default="deepseek-chat")
+LLM_TIMEOUT = env.int("LLM_TIMEOUT", default=20)
+LLM_MAX_CALLS_PER_MESSAGE = env.int("LLM_MAX_CALLS_PER_MESSAGE", default=6)
+LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=800)
+# Tests must never reach the network, whatever .env says.
+if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
+    LLM_PROVIDER = "mock"

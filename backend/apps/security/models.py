@@ -30,3 +30,19 @@ class ActionLog(models.Model):
 
     def __str__(self):
         return f"{self.action} (customer {self.customer_id})"
+
+
+class AgentAudit(models.Model):
+    """One routed LLM call: which role, what verdict, how long. No customer text, no PII."""
+
+    role = models.CharField(max_length=20)
+    verdict = models.CharField(max_length=60)
+    duration_ms = models.PositiveIntegerField()
+    fallback = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.role}: {self.verdict}"
