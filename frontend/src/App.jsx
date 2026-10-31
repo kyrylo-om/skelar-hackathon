@@ -41,7 +41,7 @@ export default function App() {
       </header>
       <main>
         {role === 'customer' && <Client />}
-        {role === 'reviewer' && (user ? <Operator /> : <Login onLogin={setUser} />)}
+        {role === 'reviewer' && (user ? <Operator onSessionExpired={() => setUser(null)} /> : <Login onLogin={setUser} />)}
       </main>
     </div>
   )

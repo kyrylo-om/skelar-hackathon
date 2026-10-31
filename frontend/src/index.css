@@ -555,3 +555,7 @@ code {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.tone-neutral .dot {
+  background: var(--muted);
+}
