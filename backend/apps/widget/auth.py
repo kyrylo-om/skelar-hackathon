@@ -2,8 +2,8 @@
 
 The product signs `<tenant>.<customer_id>.<expires_unix>.<hmac_sha256_hex>` with its widget secret
 (WIDGET_SECRETS[tenant]), the same format as execution/identity.py, and the widget sends it as
-`Authorization: Bearer <token>`. Each (tenant, customer) gets a shadow Django user, so the chat
-services and the orchestrator work for it unchanged.
+`Authorization: Bearer <token>`. Each (tenant, customer) gets a shadow Django user and its
+TenantCustomer mapping, so the chat services and the tenant agent work for it unchanged.
 """
 
 import hashlib
@@ -15,6 +15,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
+
+from apps.tenants.models import TenantCustomer
 
 ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 PREFIX = "widget"
@@ -59,6 +61,10 @@ class WidgetTokenAuthentication(BaseAuthentication):
         if created:
             user.set_unusable_password()
             user.save(update_fields=["password"])
+        # The tenant agent (apps.tenants) acts for whoever this mapping names.
+        TenantCustomer.objects.get_or_create(
+            user=user, defaults={"tenant": tenant, "external_id": customer}
+        )
         return user, None
 
     def authenticate_header(self, request):

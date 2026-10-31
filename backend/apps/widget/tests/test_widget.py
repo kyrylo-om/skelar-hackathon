@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from apps.orchestrator.mcp_gateway import McpGateway
 from apps.review.models import Chat
+from apps.tenants.models import TenantCustomer
 
 SECRET = "test-widget-secret"
 
@@ -57,6 +58,8 @@ class WidgetApiTests(TestCase):
         other = self.client.get(url, **bearer(token(customer="c-102"))).json()
         assert first["id"] == again["id"] != other["id"]
         assert first["messages"] == []
+        mapping = TenantCustomer.objects.get(user__username="widget:cloudbox:c-101")
+        assert (mapping.tenant, mapping.external_id) == ("cloudbox", "c-101")
 
     def test_message_streams_the_reply(self):
         response = self.client.post(
@@ -98,6 +101,8 @@ class WidgetApiTests(TestCase):
     EXECUTION_SECRET="test-secret",
 )
 class WidgetConfirmTests(TestCase):
+    """The confirm button belongs to the MCP gateway path, so the tenant agent is switched off."""
+
     def setUp(self):
         from unittest import mock
 
@@ -109,6 +114,9 @@ class WidgetConfirmTests(TestCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+        no_tenant = mock.patch("apps.tenants.runtime.session_for", return_value=None)
+        no_tenant.start()
+        self.addCleanup(no_tenant.stop)
 
     def send(self, text, customer="c-101"):
         response = self.client.post(
