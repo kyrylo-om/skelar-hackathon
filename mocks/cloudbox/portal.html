@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudBox</title>
+<style>
+  :root { --ink: #10213a; --muted: #5d6b80; --line: #dfe5ee; --brand: #2f6fed; --bg: #f5f7fb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: #fff;
+           border-bottom: 1px solid var(--line); }
+  header strong { color: var(--brand); font-size: 18px; }
+  header .who { margin-left: auto; color: var(--muted); }
+  main { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 20px;
+          margin-bottom: 16px; }
+  .plan { display: flex; gap: 32px; flex-wrap: wrap; }
+  .plan div span { display: block; color: var(--muted); font-size: 13px; }
+  .plan div b { font-size: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .tag { padding: 2px 8px; border-radius: 99px; font-size: 12px; background: #eef2f8; }
+  .ok { background: #e3f6ea; color: #17733b; } .bad { background: #fde8e8; color: #a61b1b; }
+  button, select { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); }
+  button { background: var(--brand); color: #fff; border-color: var(--brand); cursor: pointer; }
+  button.link { background: none; color: var(--brand); border: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <strong>CloudBox</strong><span>хмарне сховище</span>
+  <span class="who" id="who"></span>
+  <button class="link" id="logout" hidden>Вийти</button>
+</header>
+<main>
+  <section class="card" id="login">
+    <h2>Вхід (демо)</h2>
+    <select id="customers"></select> <button id="enter">Увійти</button>
+  </section>
+  <section id="account" hidden>
+    <div class="card">
+      <h2>Моя підписка</h2>
+      <div class="plan">
+        <div><span>Тариф</span><b id="plan"></b></div>
+        <div><span>Сховище</span><b id="storage"></b></div>
+        <div><span>Діє до</span><b id="period"></b></div>
+        <div><span>Автопродовження</span><b id="renew"></b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Оплати</h2>
+      <table>
+        <thead><tr><th>№</th><th>Дата</th><th>Тариф</th><th>Сума</th><th>Статус</th><th>Застосовано</th><th>Повернено</th></tr></thead>
+        <tbody id="payments"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const date = (iso) => (iso ? new Date(iso).toLocaleDateString('uk-UA') : '—');
+const STATUS = { successful: ['успішна', 'ok'], failed: ['відхилена', 'bad'], pending: ['в обробці', ''] };
+
+async function api(path, options) {
+  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+  if (!response.ok) throw new Error(response.status);
+  return response.json();
+}
+
+function cell(row, text, cls) {
+  const td = row.insertCell();
+  if (cls !== undefined) {
+    const tag = document.createElement('span');
+    tag.className = 'tag ' + cls;
+    tag.textContent = text;
+    td.append(tag);
+  } else {
+    td.textContent = text;
+  }
+}
+
+async function refresh() {
+  try {
+    const [me, sub, payments] = await Promise.all([api('/me'), api('/subscription'), api('/payments')]);
+    $('who').textContent = me.name;
+    $('plan').textContent = sub.plan;
+    $('storage').textContent = sub.storage_gb + ' ГБ';
+    $('period').textContent = date(sub.period_end);
+    $('renew').textContent = sub.auto_renew ? 'увімкнено' : 'вимкнено';
+    $('payments').replaceChildren();
+    for (const p of payments) {
+      const row = $('payments').insertRow();
+      const [label, cls] = STATUS[p.status];
+      cell(row, p.id); cell(row, date(p.created_at)); cell(row, p.plan);
+      cell(row, p.amount + ' грн'); cell(row, label, cls);
+      cell(row, p.applied_at ? 'так' : 'ні', p.applied_at ? 'ok' : '');
+      cell(row, p.refunded ? p.refunded + ' грн' : '—');
+    }
+    show(true);
+  } catch {
+    show(false);
+  }
+}
+
+function show(signedIn) {
+  $('login').hidden = signedIn;
+  $('account').hidden = !signedIn;
+  $('logout').hidden = !signedIn;
+  if (!signedIn) $('who').textContent = '';
+}
+
+$('enter').onclick = async () => {
+  await api('/portal/login', { method: 'POST', body: JSON.stringify({ customer_id: $('customers').value }) });
+  refresh();
+};
+$('logout').onclick = async () => { await api('/portal/logout', { method: 'POST' }); show(false); };
+
+api('/portal/customers').then((list) => {
+  for (const c of list) $('customers').add(new Option(`${c.name} (${c.id})`, c.id));
+});
+refresh();
+setInterval(() => { if (!$('account').hidden) refresh(); }, 3000);
+</script>
+</body>
+</html>

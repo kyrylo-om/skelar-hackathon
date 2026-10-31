@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopX</title>
+<style>
+  :root { --ink: #1d1d1b; --muted: #6b6b66; --line: #e7e4dc; --brand: #e4572e; --bg: #faf8f4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: #fff;
+           border-bottom: 1px solid var(--line); }
+  header strong { color: var(--brand); font-size: 20px; letter-spacing: -0.5px; }
+  header .who { margin-left: auto; color: var(--muted); }
+  main { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px;
+          margin-bottom: 14px; }
+  .order-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; }
+  .order-head b { font-size: 17px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  .tag { padding: 2px 8px; border-radius: 99px; font-size: 12px; background: #f0ede6; }
+  .processing { background: #fff3d6; color: #8a5a00; } .shipped { background: #e3eefc; color: #1d4f9a; }
+  .delivered { background: #e3f6ea; color: #17733b; } .cancelled { background: #fde8e8; color: #a61b1b; }
+  button, select { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); }
+  button { background: var(--brand); color: #fff; border-color: var(--brand); cursor: pointer; }
+  button.link { background: none; color: var(--brand); border: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <strong>ShopX</strong><span>електроніка та дім</span>
+  <span class="who" id="who"></span>
+  <button class="link" id="logout" hidden>Вийти</button>
+</header>
+<main>
+  <section class="card" id="login">
+    <h2>Вхід (демо)</h2>
+    <select id="customers"></select> <button id="enter">Увійти</button>
+  </section>
+  <section id="account" hidden>
+    <h2>Мої замовлення</h2>
+    <div id="orders"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const date = (iso) => (iso ? new Date(iso).toLocaleDateString('uk-UA') : '—');
+const STATUS = { processing: 'в обробці', shipped: 'відправлено', delivered: 'доставлено', cancelled: 'скасовано' };
+
+async function api(path, options) {
+  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+  if (!response.ok) throw new Error(response.status);
+  return response.json();
+}
+
+function el(tag, text, cls) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (cls) node.className = cls;
+  return node;
+}
+
+function renderOrder(o) {
+  const card = el('div', undefined, 'card');
+  const head = el('div', undefined, 'order-head');
+  head.append(el('b', `Замовлення №${o.number}`), el('span', STATUS[o.status], 'tag ' + o.status),
+              el('span', `${o.total} грн`), el('span', `від ${date(o.created_at)}`, 'muted'));
+  const list = el('ul');
+  for (const item of o.items) list.append(el('li', `${item.title} × ${item.quantity} — ${item.price} грн`));
+  card.append(head, list, el('div', `Адреса доставки: ${o.address}`, 'muted'));
+  if (o.tracking) card.append(el('div', `ТТН Нової Пошти: ${o.tracking}`, 'muted'));
+  for (const r of o.refunds) card.append(el('div', `Повернено ${r.amount} грн: ${r.reason}`, 'muted'));
+  return card;
+}
+
+async function refresh() {
+  try {
+    const [me, orders] = await Promise.all([api('/me'), api('/orders')]);
+    const details = await Promise.all(orders.map((o) => api(`/orders/${encodeURIComponent(o.number)}`)));
+    $('who').textContent = me.name;
+    $('orders').replaceChildren(...details.map(renderOrder));
+    show(true);
+  } catch {
+    show(false);
+  }
+}
+
+function show(signedIn) {
+  $('login').hidden = signedIn;
+  $('account').hidden = !signedIn;
+  $('logout').hidden = !signedIn;
+  if (!signedIn) $('who').textContent = '';
+}
+
+$('enter').onclick = async () => {
+  await api('/portal/login', { method: 'POST', body: JSON.stringify({ customer_id: $('customers').value }) });
+  refresh();
+};
+$('logout').onclick = async () => { await api('/portal/logout', { method: 'POST' }); show(false); };
+
+api('/portal/customers').then((list) => {
+  for (const c of list) $('customers').add(new Option(`${c.name} (${c.id})`, c.id));
+});
+refresh();
+setInterval(() => { if (!$('account').hidden) refresh(); }, 3000);
+</script>
+</body>
+</html>
