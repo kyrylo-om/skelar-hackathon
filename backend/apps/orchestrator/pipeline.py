@@ -10,6 +10,7 @@ model says reaches the product except through Gate and the gateway.
 import logging
 from dataclasses import dataclass, field
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -26,6 +27,7 @@ from . import plan as planning
 from . import responder
 from .gateway import AWAITING, DONE, FAILED, ActionOutcome, Busy, DevDomainGateway
 from .manifest import OUT_OF_SCOPE, SERVICE_INTENTS, SMALLTALK, UNCLEAR, Manifest, get_manifest
+from .mcp_gateway import McpGateway, ProductUnavailable
 from .models import TurnState
 
 logger = logging.getLogger("apps.orchestrator")
@@ -54,6 +56,13 @@ class Outcome:
     review: dict | None = None  # {"action", "params", "risk", "reason"} to open for a human
     summary: str = ""
     reset_clarifications: bool = False
+
+
+def _gateway(user):
+    """The product this deployment acts on: the built-in dev domain, or one behind MCP."""
+    if settings.ORCHESTRATOR_GATEWAY == "mcp":
+        return McpGateway(user)
+    return DevDomainGateway(user)
 
 
 HISTORY_TURNS = 8
@@ -237,7 +246,7 @@ def _plan_and_gate(user, masked, triage, facts, ctx, allowed, state, manifest, t
 
 
 def _execute(user, chat, plan, facts, masked, intent, priority, manifest, trace, turn):
-    gateway = DevDomainGateway(user)
+    gateway = _gateway(user)
     outcomes: list[ActionOutcome] = []
     taken_over = False
     try:
@@ -298,7 +307,11 @@ def _run(chat, user, text, state, manifest, turn) -> Outcome:
     masked = checked.masked_text
     turn.masked = masked
 
-    facts = product.load_facts(user)
+    try:
+        facts = _gateway(user).load_facts()
+    except ProductUnavailable as exc:
+        reason = f"product unavailable: {exc}"
+        return _handoff(manifest, trace, masked, "unknown", "normal", reason)
     ctx = product.policy_ctx(user, facts)
     history = _history(chat)
     turn.facts, turn.history = facts, history
@@ -379,7 +392,7 @@ def _apply(chat: Chat, state: TurnState, outcome: Outcome) -> None:
             chat.save(update_fields=["summary"])
             review.open_review(chat, **outcome.review)
             if customer is not None:
-                DevDomainGateway(customer).hand_off()  # no stale confirm button survives
+                _gateway(customer).hand_off()  # no stale confirm button survives
         if outcome.reset_clarifications:
             state.clarifications_used = 0
         if outcome.intent:
@@ -418,12 +431,15 @@ def execute_approved(customer, action: str, params: dict) -> None:
     """Run an action a human approved. Policy checks it again first, with fresh facts."""
     if action == "escalate_to_human":
         return  # the human already has the conversation
-    facts = product.load_facts(customer)
+    gateway = _gateway(customer)
+    try:
+        facts = gateway.load_facts()
+    except ProductUnavailable as exc:
+        raise ExecutionError(str(exc)) from exc
     ctx = product.policy_ctx(customer, facts)
     verdict = policy.evaluate(customer.pk, action, params, ctx, mode=policy.AFTER_APPROVAL)
     if verdict.decision != policy.ALLOW:
         raise ExecutionError(verdict.reason)
-    gateway = DevDomainGateway(customer)
     try:
         with gateway.turn("operator approved") as turn:
             outcome = gateway.run(turn, action, params, facts, reason="Approved by an operator")
@@ -436,6 +452,10 @@ def execute_approved(customer, action: str, params: dict) -> None:
 
 def pending_confirmation(user) -> dict | None:
     """The action waiting for this customer's own confirm button, if any."""
+    if settings.ORCHESTRATOR_GATEWAY == "mcp":
+        from .mcp_gateway import pending_confirmation as pending_product_confirmation
+
+        return pending_product_confirmation(user)
     from apps.support.models import Action
     from apps.support.serializers import ActionSerializer
 

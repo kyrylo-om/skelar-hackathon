@@ -17,6 +17,8 @@ from rest_framework.exceptions import APIException
 from apps.support import services as support
 from apps.support.models import Action, Conversation
 
+from . import facts as product
+
 DONE = "done"
 AWAITING = "awaiting_confirmation"
 FAILED = "failed"
@@ -56,6 +58,9 @@ def _message(exc: Exception) -> str:
 class DevDomainGateway:
     def __init__(self, user):
         self.user = user
+
+    def load_facts(self) -> dict:
+        return product.load_facts(self.user)
 
     def _ledger(self) -> Conversation:
         conversation = Conversation.objects.filter(user=self.user, status="ai").first()

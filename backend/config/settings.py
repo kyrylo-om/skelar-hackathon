@@ -133,3 +133,18 @@ if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
 ORCHESTRATOR_ENABLED = env.bool("ORCHESTRATOR_ENABLED", default=True)
 # The Responder LLM writes every reply from the customer's facts; the manifest text is the fallback.
 ORCHESTRATOR_LLM_RESPONDER = env.bool("ORCHESTRATOR_LLM_RESPONDER", default=True)
+
+# Which product the pipeline acts on: "dev" is the built-in domain (apps.subscriptions and
+# apps.support); "mcp" is an external product behind the execution server (execution/ at the
+# repository root).
+ORCHESTRATOR_GATEWAY = env("ORCHESTRATOR_GATEWAY", default="dev")
+EXECUTION_URL = env("EXECUTION_URL", default="http://127.0.0.1:9000")
+EXECUTION_TENANT = env("EXECUTION_TENANT", default="cloudbox")  # its key in products.toml
+EXECUTION_SECRET = env("EXECUTION_SECRET", default="")  # signs customer tokens; never logged
+EXECUTION_SERVICE_KEY = env("EXECUTION_SERVICE_KEY", default="")
+# Our username -> the customer's id in the product. Defaults map the seed_demo accounts onto the
+# cloudbox mock (same situations: unapplied payment, Pro with renewal, double charge).
+EXECUTION_CUSTOMERS = env.dict(
+    "EXECUTION_CUSTOMERS",
+    default={"paid_plus": "c-101", "active_pro": "c-102", "refund_review": "c-103"},
+)
