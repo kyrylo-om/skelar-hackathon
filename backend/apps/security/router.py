@@ -46,7 +46,7 @@ ROLES = {
     },
     "actor": {
         "schema": {
-            "required": ["actions", "needs_clarification"],
+            "required": ["actions"],  # a null needs_clarification may simply be left out
             "properties": {
                 "intent": {"type": "string"},
                 "confidence": {"type": "number"},

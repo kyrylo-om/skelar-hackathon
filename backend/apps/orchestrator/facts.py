@@ -45,6 +45,7 @@ def load_facts(user) -> dict:
 
 def policy_ctx(user, facts: dict) -> dict:
     ctx = {
+        "facts": facts,  # the Critic reads these; Policy ignores them
         "payments": {
             p["id"]: {
                 "customer_id": user.pk,

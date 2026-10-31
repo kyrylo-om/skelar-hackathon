@@ -111,7 +111,10 @@ def _critic(user: str) -> dict:
 
 
 def _responder(user: str) -> dict:
+    """Without a real model, the draft the orchestrator supplies is the reply."""
     context = _json_after(user, "CONTEXT")
+    if context.get("draft"):
+        return {"text": context["draft"]}
     texts = {
         "execute": "Готово: дію виконано.",
         "review": "Передав ваш запит спеціалісту, відповімо в цьому чаті.",

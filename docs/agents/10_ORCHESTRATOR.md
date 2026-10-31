@@ -47,7 +47,7 @@ apps/review  receive_customer_message ─► ports.run_pipeline
 | 11 | **Policy** (по кожній дії) | власник, платіж підтверджений, статус, ліміти, rate limit, повтор | `deny` дає відмову, `needs_review` дає review |
 | 12 | **Gate** | найсуворіший вердикт: `block` > `review` > `execute` | — |
 | 13 | **Виконання** | шлюз: `sync_subscription`, `cancel_auto_renewal`, читання | помилка: чесна відповідь і review |
-| 14 | Відповідь | шаблон із реальних результатів; LLM-переписування лише якщо ввімкнено й безпечне | шаблон |
+| 14 | Відповідь | **пише Responder LLM** з фактів клієнта, результатів дій і історії; числа й дати перевіряються кодом | манифестний шаблон (запасний) |
 
 Увесь прохід в межах `message_budget()`: не більше `LLM_MAX_CALLS_PER_MESSAGE` викликів моделі на повідомлення.
 Вичерпання ліміту дає безпечні дефолти (Triage `unclear`, Actor недоступний, Critic `needs_human`).
@@ -72,7 +72,7 @@ apps/review  receive_customer_message ─► ports.run_pipeline
 | `facts.py` | `load_facts` для Actor/Critic і `policy_ctx` для Policy, лише читання |
 | `plan.py` | детерміновані перевірки плану Actor |
 | `gateway.py` | `DevDomainGateway`: єдиний шлях запису в продукт |
-| `responder.py` | тексти відповідей, безпечне LLM-переписування |
+| `responder.py` | `compose`: відповідь пише модель з фактів; `reply_is_safe` відхиляє вигадані числа, внутрішні терміни й обіцянки; шаблони лише запасні. Відмова (Guard) не бачить ні тексту атаки, ні фактів |
 | `models.py` | `TurnState`: лічильник уточнень і останній інтент для чату |
 
 ## Безпека виконання (`gateway.py`)
@@ -89,9 +89,9 @@ apps/review  receive_customer_message ─► ports.run_pipeline
 | Змінна | Типово | Значення |
 |---|---|---|
 | `ORCHESTRATOR_ENABLED` | `True` | вимкнено: кожне повідомлення просто передається людині |
-| `ORCHESTRATOR_LLM_RESPONDER` | `False` | чи просити модель переписати шаблонну відповідь |
+| `ORCHESTRATOR_LLM_RESPONDER` | `True` | `False` повертає лише манифестні шаблони, без виклику моделі |
 | `LLM_PROVIDER` | `mock` | `deepseek` для справжньої моделі, `mock` без ключа |
-| `LLM_MAX_CALLS_PER_MESSAGE` | `6` | ліміт викликів моделі на повідомлення |
+| `LLM_MAX_CALLS_PER_MESSAGE` | `8` | ліміт викликів моделі на повідомлення (Triage, Actor і Critic з повторами, Responder) |
 | `DAILY_REFUND_LIMIT`, `AUTO_REFUND_LIMIT`, `HARD_REFUND_LIMIT`, `RISKY_ACTIONS_PER_HOUR`, `IDEMPOTENCY_WINDOW_SEC` | див. `settings.py` | пороги Policy |
 
 ## Що тестується
@@ -107,7 +107,8 @@ apps/review  receive_customer_message ─► ports.run_pipeline
 2. **Підтримані дії.** Шлюз знає `get_subscription`, `get_payments`, `sync_subscription`, `cancel_auto_renewal`. Повернення,
    пауза тощо потребують підтримки продукту; їх схвалення людиною зараз закінчується `ExecutionError`.
 3. **Маніфест у YAML/БД** замість Python-структури, і читання реєстру дій Policy з нього.
-4. **Контекст розмови.** Actor бачить лише останнє повідомлення, факти й лічильники (немає історії діалогу), а
-   `pending_action` у контексті завжди `null`.
-5. **Живий тест моделі.** Оркестратор перевірено на mock; поведінку на DeepSeek покаже `scripts/check_llm.py` із ключем.
+4. **Контекст розмови.** Агенти бачать до 8 останніх повідомлень (картки замасковані), але `pending_action` у
+   контексті Actor усе ще завжди `null`.
+5. **Живі перевірки** на `deepseek-flash` описані в [docs/reports](../reports/README.md): 16 сценаріїв і 8 розмов, без
+   небезпечних дій.
 6. **Чи Triage й Actor лишаються двома викликами**, бюджет часу (30 с з `docs/BACKEND.md`) і метрика «заблоковано N із N».

@@ -115,7 +115,10 @@ def _deepseek_call(role: str, system: str, user: str) -> str:
         raise LLMNetworkError(type(exc).__name__) from None
     except openai.APIError as exc:
         raise LLMError(type(exc).__name__) from None
-    return response.choices[0].message.content or ""
+    choice = response.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        logger.warning("llm role=%s output hit the token limit and was cut off", role)
+    return choice.message.content or ""
 
 
 def _provider_call(role: str, system: str, user: str) -> str:

@@ -59,7 +59,7 @@ class Manifest:
             for name in intent.allowed_actions:
                 if name not in self.actions:
                     raise ValueError(f"intent {intent.id!r} uses unknown action {name!r}")
-        for key in ("review", "block", "failed", "busy", "smalltalk", "out_of_scope"):
+        for key in ("review", "block", "failed", "busy", "smalltalk", "out_of_scope", "waiting"):
             if key not in self.responses:
                 raise ValueError(f"missing response template {key!r}")
 
@@ -133,16 +133,17 @@ CLOUDBOX = Manifest(
         "out_of_scope": "Допомагаю лише з підпискою та оплатою. Опишіть, будь ласка, ситуацію.",
         "clarify": "Підкажіть, будь ласка, що саме потрібно: проблема з оплатою чи з підпискою?",
         "no_payment": "Не бачу оплати, яку потрібно активувати. Передав запит спеціалісту.",
-        "sync_subscription.done": "Знайшов ваш платіж. Тариф {plan} активовано до {period_end}.",
+        "waiting": "Ваш запит уже у спеціаліста, він відповість у цьому чаті. Дякуємо за терпіння!",
+        "sync_subscription.done": "Знайшов ваш платіж. Тариф {plan} активовано {period_end}.",
         "cancel_auto_renewal.awaiting": (
             "Щоб вимкнути автопродовження, натисніть «Підтвердити» нижче. "
-            "Доступ збережеться до {period_end}."
+            "Доступ збережеться {period_end}."
         ),
         "cancel_auto_renewal.already": (
-            "Автопродовження вже вимкнено, доступ діє до {period_end}. Нічого змінювати не треба."
+            "Автопродовження вже вимкнено, доступ діє {period_end}. Нічого змінювати не треба."
         ),
         "get_subscription.done": (
-            "Ваш тариф: {plan}, діє до {period_end}. Автопродовження: {auto_renew}."
+            "Ваш тариф: {plan}. Діє: {period_end}. Автопродовження: {auto_renew}."
         ),
         "get_subscription.none": "Не бачу активної підписки. Передав запит спеціалісту.",
         "get_payments.done": "Останні оплати: {payments}.",

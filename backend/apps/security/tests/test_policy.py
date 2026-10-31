@@ -1,3 +1,5 @@
+from unittest import mock
+
 from django.test import TestCase, override_settings
 
 from apps.security import policy
@@ -210,3 +212,14 @@ class AfterHumanApprovalTests(TestCase):
 
     def test_unknown_mode_is_denied(self):
         assert refund(30, mode="whatever").decision == DENY
+
+
+class PolicyErrorTests(TestCase):
+    def test_a_bug_inside_a_rule_denies_instead_of_crashing(self):
+        def boom(*args):
+            raise RuntimeError("boom")
+
+        with mock.patch.object(policy, "CHECKS", [boom]):
+            result = policy.evaluate(ME, "get_subscription", {}, CTX)
+
+        assert (result.decision, result.rule) == (DENY, "policy_error")

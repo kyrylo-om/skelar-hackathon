@@ -15,7 +15,15 @@ def _without_reasoning(plan: dict) -> dict:
 
 
 def review_plan(message: str, plan: dict, ctx: dict | None = None) -> CriticResult:
-    context = {"current_order": (ctx or {}).get("current_order")}
+    ctx = ctx or {}
+    context = {
+        # The Critic must see the same facts the plan was built from, or it cannot check them.
+        "facts": ctx.get("facts"),
+        "current_order": ctx.get("current_order"),
+        "pending_action": ctx.get("pending_action"),
+        "retention_offered": ctx.get("retention_offered", False),
+        "history": ctx.get("history"),
+    }
     result = router.route(
         "critic",
         {"plan": _without_reasoning(plan), "context": context, "customer_message": message},
