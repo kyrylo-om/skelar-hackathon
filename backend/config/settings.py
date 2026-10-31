@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import environ
@@ -23,6 +24,11 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local
     "apps.core",
+    "apps.accounts",
+    "apps.subscriptions",
+    "apps.support",
+    "apps.review",
+    "apps.security",
 ]
 
 MIDDLEWARE = [
@@ -59,8 +65,15 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 5},
     },
 }
+
+# Keep the template SQLite default; PostgreSQL is selected by DATABASE_URL.
+if env("DATABASE_URL", default=""):
+    DATABASES["default"] = env.db("DATABASE_URL")
+
+CSRF_FAILURE_VIEW = "apps.core.errors.csrf_failure"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -80,6 +93,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "apps.core.errors.api_exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
@@ -90,3 +104,23 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+# Security thresholds (UAH and counts). Policy reads these; nothing is hardcoded there.
+AUTO_REFUND_LIMIT = env.int("AUTO_REFUND_LIMIT", default=50)
+HARD_REFUND_LIMIT = env.int("HARD_REFUND_LIMIT", default=1000)
+RISKY_ACTIONS_PER_HOUR = env.int("RISKY_ACTIONS_PER_HOUR", default=5)
+IDEMPOTENCY_WINDOW_SEC = env.int("IDEMPOTENCY_WINDOW_SEC", default=120)
+POLICY_REVIEW_HIGH_RISK = env.bool("POLICY_REVIEW_HIGH_RISK", default=True)
+POLICY_REVIEW_VIP = env.bool("POLICY_REVIEW_VIP", default=True)
+
+# LLM. The key comes only from the environment (.env is git-ignored); never log or return it.
+LLM_PROVIDER = env("LLM_PROVIDER", default="mock")  # deepseek | mock
+LLM_API_KEY = env("LLM_API_KEY", default="")
+LLM_BASE_URL = env("LLM_BASE_URL", default="https://api.deepseek.com")
+LLM_MODEL = env("LLM_MODEL", default="deepseek-chat")
+LLM_TIMEOUT = env.int("LLM_TIMEOUT", default=20)
+LLM_MAX_CALLS_PER_MESSAGE = env.int("LLM_MAX_CALLS_PER_MESSAGE", default=6)
+LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=800)
+# Tests must never reach the network, whatever .env says.
+if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
+    LLM_PROVIDER = "mock"

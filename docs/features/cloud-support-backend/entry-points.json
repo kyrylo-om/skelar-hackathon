@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "feature": "cloud-support-backend",
+  "status": "partial",
+  "entry_points": [
+    {
+      "id": "health",
+      "app": "apps.core",
+      "kind": "api",
+      "path": "backend/apps/core/views.py",
+      "symbol": "health",
+      "description": "Public status response and CSRF cookie; no dependency readiness probe.",
+      "route": "/api/health/",
+      "method": "GET"
+    },
+    {
+      "id": "csrf-bootstrap",
+      "app": "apps.accounts",
+      "kind": "api",
+      "path": "backend/apps/accounts/views.py",
+      "symbol": "csrf",
+      "description": "Bootstrap CSRF cookie.",
+      "route": "/api/auth/csrf/",
+      "method": "GET"
+    },
+    {
+      "id": "session-login",
+      "app": "apps.accounts",
+      "kind": "api",
+      "path": "backend/apps/accounts/views.py",
+      "symbol": "LoginView.post",
+      "description": "Validate credentials and start a CSRF-protected session.",
+      "route": "/api/auth/login/",
+      "method": "POST"
+    },
+    {
+      "id": "session-logout",
+      "app": "apps.accounts",
+      "kind": "api",
+      "path": "backend/apps/accounts/views.py",
+      "symbol": "logout",
+      "description": "End the authenticated session.",
+      "route": "/api/auth/logout/",
+      "method": "POST"
+    },
+    {
+      "id": "current-user",
+      "app": "apps.accounts",
+      "kind": "api",
+      "path": "backend/apps/accounts/views.py",
+      "symbol": "me",
+      "description": "Return the authenticated user shape.",
+      "route": "/api/me/",
+      "method": "GET"
+    },
+    {
+      "id": "subscription-read",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "subscription",
+      "description": "Read the current customer subscription.",
+      "route": "/api/subscription/",
+      "method": "GET"
+    },
+    {
+      "id": "conversation-create",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "conversations",
+      "description": "Create a session-owned AI-mode conversation.",
+      "route": "/api/conversations/",
+      "method": "POST"
+    },
+    {
+      "id": "conversation-read",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "conversation_detail",
+      "description": "Read the customer-owned transcript and pending action.",
+      "route": "/api/conversations/<uuid:conversation_id>/",
+      "method": "GET"
+    },
+    {
+      "id": "customer-message",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "messages",
+      "description": "Deduplicate/store customer text and currently hand off AI-mode requests.",
+      "route": "/api/conversations/<uuid:conversation_id>/messages/",
+      "method": "POST"
+    },
+    {
+      "id": "cancel-confirm",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "confirm",
+      "description": "Confirm stored cancellation with no mutable parameters.",
+      "route": "/api/actions/<uuid:action_id>/confirm/",
+      "method": "POST"
+    },
+    {
+      "id": "operator-queue",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "operator_queue",
+      "description": "List waiting and assigned cases for staff.",
+      "route": "/api/operator/conversations/",
+      "method": "GET"
+    },
+    {
+      "id": "operator-read",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "operator_detail",
+      "description": "Read waiting cases or the assigned operator transcript.",
+      "route": "/api/operator/conversations/<uuid:conversation_id>/",
+      "method": "GET"
+    },
+    {
+      "id": "operator-claim",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "claim",
+      "description": "Atomically claim a waiting case for current staff.",
+      "route": "/api/operator/conversations/<uuid:conversation_id>/claim/",
+      "method": "POST"
+    },
+    {
+      "id": "operator-reply",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "operator_messages",
+      "description": "Persist/deduplicate assigned operator reply in same transcript.",
+      "route": "/api/operator/conversations/<uuid:conversation_id>/messages/",
+      "method": "POST"
+    },
+    {
+      "id": "operator-resolve",
+      "app": "apps.support",
+      "kind": "api",
+      "path": "backend/apps/support/views.py",
+      "symbol": "resolve",
+      "description": "Resolve assigned case; replay is harmless.",
+      "route": "/api/operator/conversations/<uuid:conversation_id>/resolve/",
+      "method": "POST"
+    },
+    {
+      "id": "subscription-context",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "get_subscription",
+      "description": "Return scoped serialized subscription context."
+    },
+    {
+      "id": "payment-context",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "get_payments",
+      "description": "Read only payment fields for the trusted user."
+    },
+    {
+      "id": "turn-begin",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "begin_turn",
+      "description": "Acquire/recover conversation lease and persist customer message once."
+    },
+    {
+      "id": "turn-check",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "check_turn",
+      "description": "Reject stale token/version, expired lease or non-AI state."
+    },
+    {
+      "id": "turn-finish",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "finish_turn",
+      "description": "Persist optional assistant reply and clear active lease."
+    },
+    {
+      "id": "human-handoff",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "handoff_to_operator",
+      "description": "Persist fallback summary, pause AI and reject pending candidates."
+    },
+    {
+      "id": "payment-eligibility",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "eligible_payment",
+      "description": "Check successful current purchase and supersession against subscription."
+    },
+    {
+      "id": "action-propose",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "propose_action",
+      "description": "Create server-bound expiring sync or cancellation candidate."
+    },
+    {
+      "id": "sync-propose",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "propose_sync_subscription",
+      "description": "Typed internal wrapper for paid-plan proposal."
+    },
+    {
+      "id": "cancel-propose",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "propose_cancel_auto_renewal",
+      "description": "Typed internal wrapper for renewal cancellation proposal."
+    },
+    {
+      "id": "critic-review",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "record_review",
+      "description": "Validate and persist trusted review; no provider call."
+    },
+    {
+      "id": "action-execute",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "_execute",
+      "description": "Atomic checks and successful billing writes; internal helper."
+    },
+    {
+      "id": "sync-execute",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "execute_sync",
+      "description": "Execute approved synchronization under active server lease."
+    },
+    {
+      "id": "cancel-execute",
+      "app": "apps.support",
+      "kind": "service",
+      "path": "backend/apps/support/services.py",
+      "symbol": "confirm_cancellation",
+      "description": "Backend-only cancellation entry reserved for confirmation endpoint."
+    },
+    {
+      "id": "demo-seed",
+      "app": "apps.support",
+      "kind": "command",
+      "path": "backend/apps/support/management/commands/seed_demo.py",
+      "symbol": "Command.handle",
+      "description": "Local idempotent synthetic fixture creation; requires DEBUG and supplied password."
+    },
+    {
+      "id": "ui-health",
+      "app": "frontend",
+      "kind": "ui_event",
+      "path": "frontend/src/App.tsx",
+      "symbol": "App",
+      "description": "Only current UI event: read health on mount and display status."
+    },
+    {
+      "id": "browser-api",
+      "app": "frontend",
+      "kind": "service",
+      "path": "frontend/src/api/client.ts",
+      "symbol": "apiFetch",
+      "description": "Shared same-origin fetch with cookies, JSON and CSRF header."
+    }
+  ],
+  "unresolved": [
+    "Customer and operator product screens and route handlers do not exist; frontend only calls health.",
+    "No actor, critic provider, typed model dispatcher or live Gemma integration exists.",
+    "Internal sync/proposal/review services have tests but no production HTTP orchestration caller.",
+    "AI response-cache persistence and finish_turn must be integrated atomically.",
+    "Runtime route resolution, migrations, permission behavior and test results are not verified by documentation inspection."
+  ]
+}

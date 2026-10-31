@@ -81,3 +81,6 @@ await api.post('/items/', { title: 'New' })
 **Configuration** is read from environment variables (see `backend/.env.example`).
 The API requires authentication by default (`IsAuthenticated`); open individual
 endpoints with `permission_classes([AllowAny])` as in `apps/core/views.py`.
+
+Cloud Support backend implementation, synthetic-account setup, verification limits and
+AI integration contract: [docs/BACKEND.md](docs/BACKEND.md).

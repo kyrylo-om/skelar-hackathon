@@ -48,3 +48,19 @@ export const api = {
     apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 }
+
+type ErrorBody = { detail?: unknown; error?: { code?: string; message?: string } } | null
+
+// The API answers errors as {"error": {"code", "message"}} (accounts, support) or {"detail"} (review).
+export function apiErrorMessage(err: unknown, fallback = 'Помилка сервера'): string {
+  if (!(err instanceof ApiError)) return 'Сервер недоступний'
+  const body = err.data as ErrorBody
+  return body?.error?.message || (typeof body?.detail === 'string' ? body.detail : '') || fallback
+}
+
+// A failed CSRF check is a 403 too, but the session is still fine.
+export function isCsrfFailure(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false
+  const body = err.data as ErrorBody
+  return body?.error?.code === 'csrf_failed' || String(body?.detail).startsWith('CSRF')
+}
