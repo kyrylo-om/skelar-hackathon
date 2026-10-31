@@ -23,6 +23,9 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local
     "apps.core",
+    "apps.accounts",
+    "apps.subscriptions",
+    "apps.support",
 ]
 
 MIDDLEWARE = [
@@ -59,8 +62,15 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 5},
     },
 }
+
+# Keep the template SQLite default; PostgreSQL is selected by DATABASE_URL.
+if env("DATABASE_URL", default=""):
+    DATABASES["default"] = env.db("DATABASE_URL")
+
+CSRF_FAILURE_VIEW = "apps.core.errors.csrf_failure"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -80,6 +90,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "apps.core.errors.api_exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
