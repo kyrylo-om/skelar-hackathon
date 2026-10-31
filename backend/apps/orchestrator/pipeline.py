@@ -365,6 +365,14 @@ def _run_tenant(chat, user, masked, state, manifest, turn, session, history, tra
                 params=action_params,
                 risk=risk,
             )
+        if result.decision == CLARIFY:
+            return Outcome(
+                "clarify",
+                result.reason or manifest.responses["clarify"],
+                result.trace,
+                "clarify",
+                "normal",
+            )
         if result.decision == EXECUTE:
             outcome = session.execute_write(endpoint, path_params, body)
             turn.outcomes = [outcome]

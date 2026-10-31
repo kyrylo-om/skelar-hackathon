@@ -40,6 +40,9 @@ answers 404, like a missing one.
 | `c-101` Олена Коваль | cloudbox | paid for Plus (`pay-501`), payment never applied, still on Free |
 | `c-102` Андрій Мельник | cloudbox | Pro with auto-renewal on |
 | `c-103` Ірина Бондар | cloudbox | charged twice for the same month of Plus (`pay-503`, `pay-504`) |
+| `c-104` Марія Гнатюк | cloudbox | Plus, auto-renewal off |
+| `c-105` Богдан Лисенко | cloudbox | Free, no payments |
+| `c-106` Дарина Романюк | cloudbox | Pro with auto-renewal on |
 | `s-201` Олена Коваль | shopx | `1042` processing, `1043` delivered, `1044` shipped |
 | `s-202` Максим Ткаченко | shopx | `2001` processing; never visible to `s-201` |
 

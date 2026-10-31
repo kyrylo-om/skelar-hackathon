@@ -16,8 +16,13 @@ import json
 from typing import Any
 
 import httpx2
-from mcp import Client
-from mcp.client.streamable_http import streamable_http_client
+
+try:
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+except (ImportError, ModuleNotFoundError):
+    Client = None
+    streamable_http_client = None
 
 from .identity import TOKEN_HEADER
 
@@ -58,6 +63,9 @@ class ExecutionClient:
         return self._http("POST", f"/proposals/{proposal_id}/reject")
 
     def _tool(self, token: str, name: str, args: dict) -> Any:
+        if Client is None or streamable_http_client is None:
+            raise ExecutionError("mcp package is not installed")
+
         async def call():
             async with httpx2.AsyncClient(headers={TOKEN_HEADER: token}, timeout=15) as http:
                 transport = streamable_http_client(f"{self.url}/mcp", http_client=http)
