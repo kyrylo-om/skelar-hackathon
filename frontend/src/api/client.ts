@@ -41,9 +41,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 export const api = {
-  get: <T>(path: string) => apiFetch<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  get: <T>(path: string, options: RequestInit = {}) => apiFetch<T>(path, options),
+  post: <T>(path: string, body?: unknown, options: RequestInit = {}) =>
+    apiFetch<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
@@ -62,5 +62,11 @@ export function apiErrorMessage(err: unknown, fallback = 'Помилка сер�
 export function isCsrfFailure(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false
   const body = err.data as ErrorBody
-  return body?.error?.code === 'csrf_failed' || String(body?.detail).startsWith('CSRF')
+  return body?.error?.code === 'csrf_failed' || /CSRF/i.test(String(body?.detail ?? body?.error?.message ?? ''))
+}
+
+export function isSessionExpired(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false
+  const body = err.data as ErrorBody
+  return err.status === 401 || body?.error?.code === 'not_authenticated'
 }
