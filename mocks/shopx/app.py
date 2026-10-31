@@ -97,7 +97,7 @@ def create_app(db_path: Path | None = None, api_key: str | None = None) -> Starl
 
     return Starlette(
         routes=[
-            *portal_routes(HERE / "portal.html", db),
+            *portal_routes(HERE / "portal.html", db, "shopx"),
             Route("/me", me),
             Route("/orders", orders),
             Route("/orders/{number}", get_order),

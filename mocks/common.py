@@ -7,10 +7,17 @@ support agent reads is exactly the one the product runs on.
 Two ways in:
   - the support service: `Authorization: Bearer <api key>` plus `X-Customer-Id`;
   - the product's own portal: a demo login cookie (a mock; no passwords).
+
+The portal also signs short-lived tokens for our support widget (`POST /support/token`), the part
+every product embedding the widget has to build on its side.
 """
 
+import hashlib
+import hmac
+import os
 import re
 import sqlite3
+import time
 from contextlib import closing, contextmanager
 from functools import wraps
 from pathlib import Path
@@ -20,6 +27,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 COOKIE = "customer"
+WIDGET_TOKEN_TTL = 600
 
 
 class Database:
@@ -90,8 +98,9 @@ class Auth:
         return endpoint
 
 
-def portal_routes(page: Path, db: Database) -> list[Route]:
-    """The product's own customer portal: a page, a demo login and a logout."""
+def portal_routes(page: Path, db: Database, tenant: str) -> list[Route]:
+    """The product's own customer portal: a page, a demo login, a logout and a widget token."""
+    widget_secret = os.environ.get(f"{tenant.upper()}_WIDGET_SECRET", f"{tenant}-widget-dev-secret")
 
     async def index(request):
         return FileResponse(page)
@@ -112,9 +121,22 @@ def portal_routes(page: Path, db: Database) -> list[Route]:
         response.delete_cookie(COOKIE)
         return response
 
+    async def support_token(request):
+        """A token for the signed-in customer: `<tenant>.<customer>.<expires>.<hmac>`."""
+        customer = request.cookies.get(COOKIE)
+        if not customer or not db.one("SELECT id FROM customers WHERE id = ?", customer):
+            return error(401, "Not signed in")
+        payload = f"{tenant}.{customer}.{int(time.time()) + WIDGET_TOKEN_TTL}"
+        signature = hmac.new(widget_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        return JSONResponse(
+            {"token": f"{payload}.{signature}", "expires_in": WIDGET_TOKEN_TTL},
+            headers={"Cache-Control": "no-store"},
+        )
+
     return [
         Route("/", index),
         Route("/portal/customers", customers),
         Route("/portal/login", login, methods=["POST"]),
         Route("/portal/logout", logout, methods=["POST"]),
+        Route("/support/token", support_token, methods=["POST"]),
     ]

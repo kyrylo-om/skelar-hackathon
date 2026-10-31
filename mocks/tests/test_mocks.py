@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import sqlite3
 
 import pytest
@@ -68,6 +70,18 @@ def test_portal_login(tmp_path):
     assert portal.get("/me").json()["id"] == "c-101"
     portal.post("/portal/logout")
     assert portal.get("/me").status_code == 401
+
+
+def test_portal_signs_widget_tokens_for_the_signed_in_customer(tmp_path):
+    portal = TestClient(cloudbox_app(db_path=tmp_path / "db.sqlite3", api_key=KEY))
+    assert portal.post("/support/token").status_code == 401
+    portal.post("/portal/login", json={"customer_id": "c-101"})
+    answer = portal.post("/support/token").json()
+    tenant, customer, expires, signature = answer["token"].split(".")
+    payload = f"{tenant}.{customer}.{expires}"
+    secret = b"cloudbox-widget-dev-secret"
+    assert (tenant, customer, answer["expires_in"]) == ("cloudbox", "c-101", 600)
+    assert signature == hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
 
 
 # CloudBox

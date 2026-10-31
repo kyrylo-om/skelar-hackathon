@@ -7,7 +7,8 @@ first proposed and stored there, and runs only when this code executes it: right
 said "execute", or when the customer presses confirm for `confirm: customer` actions.
 
 The customer is identified by a short-lived token signed here for the session's user. The product
-sees its own customer id from EXECUTION_CUSTOMERS, never anything the model wrote.
+sees its own customer id from EXECUTION_CUSTOMERS or the widget token (apps.widget), never
+anything the model wrote.
 """
 
 import asyncio
@@ -23,6 +24,7 @@ import httpx2
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+
 try:
     from mcp import Client
     from mcp.client.streamable_http import streamable_http_client
@@ -33,6 +35,7 @@ from rest_framework.exceptions import NotFound
 
 from apps.core.errors import Conflict
 from apps.review.models import Chat
+from apps.widget.auth import identity as widget_identity
 
 from .gateway import AWAITING, DONE, FAILED, ActionOutcome
 from .manifest import get_manifest
@@ -144,14 +147,18 @@ class McpGateway:
     def __init__(self, user, client: ExecutionClient | None = None):
         self.user = user
         self.client = client or ExecutionClient()
-        self.customer = settings.EXECUTION_CUSTOMERS.get(user.get_username())
+        # A widget customer brings its product and id in its signed token; others use the map.
+        self.tenant, self.customer = widget_identity(user) or (
+            settings.EXECUTION_TENANT,
+            settings.EXECUTION_CUSTOMERS.get(user.get_username()),
+        )
 
     def token(self) -> str:
         if not self.customer:
             raise ProductUnavailable("this account is not connected to the product")
         if not settings.EXECUTION_SECRET:
             raise ProductUnavailable("EXECUTION_SECRET is not set")
-        payload = f"{settings.EXECUTION_TENANT}.{self.customer}.{int(time.time()) + TOKEN_TTL}"
+        payload = f"{self.tenant}.{self.customer}.{int(time.time()) + TOKEN_TTL}"
         key = settings.EXECUTION_SECRET.encode()
         return f"{payload}.{hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()}"
 
