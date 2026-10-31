@@ -23,6 +23,7 @@ class ActionLog(models.Model):
     customer_id = models.IntegerField(db_index=True)
     action = models.CharField(max_length=60)
     params_hash = models.CharField(max_length=64)
+    amount = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

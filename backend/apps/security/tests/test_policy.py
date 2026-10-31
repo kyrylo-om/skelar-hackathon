@@ -15,8 +15,10 @@ CTX = {
 }
 
 
-def refund(amount, order="1042", **ctx):
-    return policy.evaluate(ME, "issue_refund", {"order": order, "amount": amount}, {**CTX, **ctx})
+def refund(amount, order="1042", mode="normal", **ctx):
+    return policy.evaluate(
+        ME, "issue_refund", {"order": order, "amount": amount}, {**CTX, **ctx}, mode=mode
+    )
 
 
 class PolicyTests(TestCase):
@@ -119,3 +121,92 @@ class PolicyTests(TestCase):
 
     def test_missing_context_is_safe(self):
         assert policy.evaluate(ME, "cancel_order", {"order": "1042"}).decision == DENY
+
+
+PAY_CTX = {
+    "payments": {
+        "p1": {"customer_id": ME, "confirmed": True, "applied": False, "amount": 99},
+        "p2": {"customer_id": ME, "confirmed": True, "applied": True, "amount": 99},
+        "p3": {"customer_id": ME, "confirmed": False, "applied": False, "amount": 99},
+        "p9": {"customer_id": 99, "confirmed": True, "applied": False, "amount": 99},
+    },
+}
+
+
+class CloudStorageActionTests(TestCase):
+    def sync(self, payment_id, **kwargs):
+        return policy.evaluate(
+            ME, "sync_subscription", {"payment_id": payment_id}, PAY_CTX, **kwargs
+        )
+
+    def test_confirmed_unapplied_payment_is_allowed(self):
+        assert self.sync("p1").decision == ALLOW
+
+    def test_applied_or_unconfirmed_payment_is_denied(self):
+        for payment_id in ("p2", "p3"):
+            result = self.sync(payment_id)
+            assert (result.decision, result.rule) == (DENY, "payment_not_confirmed")
+
+    def test_someone_elses_payment_is_denied(self):
+        assert self.sync("p9").rule == "ownership"
+        assert self.sync("nope").rule == "ownership"
+
+    def test_reads_and_cancelling_renewal_are_known_actions(self):
+        for name in ("get_subscription", "get_payments", "cancel_auto_renewal"):
+            assert policy.evaluate(ME, name, {}, PAY_CTX).decision == ALLOW
+
+    def test_vip_does_not_slow_down_harmless_reads(self):
+        assert policy.evaluate(ME, "get_subscription", {}, {"vip": True}).decision == ALLOW
+        assert policy.evaluate(ME, "cancel_auto_renewal", {}, {"vip": True}).rule == "vip"
+
+
+class DailyLimitTests(TestCase):
+    @override_settings(DAILY_REFUND_LIMIT=100, AUTO_REFUND_LIMIT=1000, RISKY_ACTIONS_PER_HOUR=50)
+    def test_small_refunds_cannot_add_up_past_the_daily_cap(self):
+        for amount in (40, 41):
+            assert refund(amount).decision == ALLOW
+            policy.record(ME, "issue_refund", {"order": "1042", "amount": amount})
+        result = refund(30)
+        assert (result.decision, result.rule) == (DENY, "daily_limit")
+        assert refund(19).decision == ALLOW
+
+    @override_settings(DAILY_REFUND_LIMIT=100, AUTO_REFUND_LIMIT=1000)
+    def test_another_customers_refunds_do_not_count(self):
+        policy.record(99, "issue_refund", {"order": "x", "amount": 90})
+        assert refund(60).decision == ALLOW
+
+
+class AfterHumanApprovalTests(TestCase):
+    def test_review_bands_are_skipped_after_a_human_approved(self):
+        assert refund(300).decision == NEEDS_REVIEW
+        assert refund(300, mode=policy.AFTER_APPROVAL).decision == ALLOW
+        assert (
+            policy.evaluate(ME, "escalate_to_human", {}, CTX, mode=policy.AFTER_APPROVAL).decision
+            == ALLOW
+        )
+        assert refund(30, vip=True, mode=policy.AFTER_APPROVAL).decision == ALLOW
+
+    def test_hard_limits_are_still_enforced(self):
+        assert refund(5000, mode=policy.AFTER_APPROVAL).rule == "refund_hard_limit"
+        assert refund(10**6, order="1042", mode=policy.AFTER_APPROVAL).decision == DENY
+
+    def test_state_changes_are_caught(self):
+        stale = {"orders": {"1042": {"customer_id": ME, "status": "shipped", "total": 6000}}}
+        result = policy.evaluate(
+            ME, "cancel_order", {"order": "1042"}, stale, mode=policy.AFTER_APPROVAL
+        )
+        assert (result.decision, result.rule) == (DENY, "status")
+
+    def test_ownership_and_repeats_are_still_checked(self):
+        assert refund(30, order="9999", mode=policy.AFTER_APPROVAL).rule == "ownership"
+        policy.record(ME, "issue_refund", {"order": "1042", "amount": 30})
+        assert refund(30, mode=policy.AFTER_APPROVAL).rule == "idempotency"
+
+    @override_settings(RISKY_ACTIONS_PER_HOUR=1)
+    def test_rate_limit_is_not_applied_to_an_approved_action(self):
+        policy.record(ME, "issue_refund", {"order": "1042", "amount": 10})
+        assert refund(20, mode=policy.AFTER_APPROVAL).decision == ALLOW
+        assert refund(20).rule == "rate_limit"
+
+    def test_unknown_mode_is_denied(self):
+        assert refund(30, mode="whatever").decision == DENY

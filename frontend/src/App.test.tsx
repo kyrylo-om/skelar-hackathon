@@ -176,3 +176,23 @@ test('a failed CSRF check shows an error but keeps the operator signed in', asyn
   expect(await screen.findByText('Потрібен коректний CSRF-токен.')).toBeInTheDocument()
   expect(screen.queryByText('Вхід для менеджерів')).not.toBeInTheDocument()
 })
+
+test('the confirm button posts to the accounts API and refreshes the chat', async () => {
+  const confirm = vi.fn(() => json({ id: 'a1', status: 'succeeded' }))
+  const withPending = {
+    ...customerChat,
+    pendingConfirmation: { id: 'a1', kind: 'cancel_auto_renewal', description: 'Вимкнути автоподовження' },
+  }
+  let chatCalls = 0
+  stubApi({
+    ...customerRoutes,
+    'GET /review/my/chat/': () => json(chatCalls++ === 0 ? withPending : customerChat),
+    'POST /actions/a1/confirm/': confirm,
+  })
+  render(<App />)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Підтвердити' }))
+
+  await waitFor(() => expect(confirm).toHaveBeenCalled())
+  expect(await screen.findByText(/автопродовження вимкнено/)).toBeInTheDocument()
+})

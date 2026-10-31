@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.support",
     "apps.review",
     "apps.security",
+    "apps.orchestrator",
 ]
 
 MIDDLEWARE = [
@@ -108,6 +109,7 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Security thresholds (UAH and counts). Policy reads these; nothing is hardcoded there.
 AUTO_REFUND_LIMIT = env.int("AUTO_REFUND_LIMIT", default=50)
 HARD_REFUND_LIMIT = env.int("HARD_REFUND_LIMIT", default=1000)
+DAILY_REFUND_LIMIT = env.int("DAILY_REFUND_LIMIT", default=2000)
 RISKY_ACTIONS_PER_HOUR = env.int("RISKY_ACTIONS_PER_HOUR", default=5)
 IDEMPOTENCY_WINDOW_SEC = env.int("IDEMPOTENCY_WINDOW_SEC", default=120)
 POLICY_REVIEW_HIGH_RISK = env.bool("POLICY_REVIEW_HIGH_RISK", default=True)
@@ -124,3 +126,8 @@ LLM_MAX_OUTPUT_TOKENS = env.int("LLM_MAX_OUTPUT_TOKENS", default=800)
 # Tests must never reach the network, whatever .env says.
 if sys.argv[1:2] == ["test"] or "pytest" in sys.modules:
     LLM_PROVIDER = "mock"
+
+# The agent pipeline behind the customer chat. Off: every message goes straight to a human.
+ORCHESTRATOR_ENABLED = env.bool("ORCHESTRATOR_ENABLED", default=True)
+# Let the Responder LLM rephrase replies (its text is used only if it passes safety checks).
+ORCHESTRATOR_LLM_RESPONDER = env.bool("ORCHESTRATOR_LLM_RESPONDER", default=False)
