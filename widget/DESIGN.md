@@ -1,5 +1,8 @@
 # Support widget
 
+For Docker Compose or a complete local launch of all six servers, see
+[the shared startup guide](../docs/RUNNING.md).
+
 The chat a product embeds on its own site with one tag:
 
 ```html

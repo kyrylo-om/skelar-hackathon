@@ -1,0 +1,154 @@
+name: cloud-support
+
+x-python: &python
+  image: cloud-support-python:local
+  build:
+    context: .
+    dockerfile: docker/python.Dockerfile
+  init: true
+
+x-health: &health
+  interval: 5s
+  timeout: 4s
+  retries: 12
+  start_period: 15s
+
+services:
+  cloudbox:
+    <<: *python
+    command: [python, -m, mocks.cloudbox]
+    environment:
+      MOCK_DATA_DIR: /data
+      CLOUDBOX_API_KEY: ${CLOUDBOX_API_KEY:?Copy .env.example to .env first}
+      CLOUDBOX_WIDGET_SECRET: ${CLOUDBOX_WIDGET_SECRET:?Set CLOUDBOX_WIDGET_SECRET}
+    ports: ["127.0.0.1:9201:9201"]
+    volumes: [cloudbox-data:/data]
+    healthcheck:
+      <<: *health
+      test: [CMD, python, /app/docker/healthcheck.py, "http://127.0.0.1:9201/portal/customers"]
+
+  shopx:
+    <<: *python
+    command: [python, -m, mocks.shopx]
+    environment:
+      MOCK_DATA_DIR: /data
+      SHOPX_API_KEY: ${SHOPX_API_KEY:?Set SHOPX_API_KEY}
+      SHOPX_WIDGET_SECRET: ${SHOPX_WIDGET_SECRET:?Set SHOPX_WIDGET_SECRET}
+    ports: ["127.0.0.1:9202:9202"]
+    volumes: [shopx-data:/data]
+    healthcheck:
+      <<: *health
+      test: [CMD, python, /app/docker/healthcheck.py, "http://127.0.0.1:9202/portal/customers"]
+
+  execution:
+    <<: *python
+    command: [python, -m, execution]
+    environment:
+      EXECUTION_SECRET: ${EXECUTION_SECRET:?Set EXECUTION_SECRET}
+      EXECUTION_SERVICE_KEY: ${EXECUTION_SERVICE_KEY:?Set EXECUTION_SERVICE_KEY}
+      EXECUTION_PRODUCTS: /app/docker/products.toml
+      EXECUTION_ALLOWED_HOSTS: execution:9000,127.0.0.1:9000,localhost:9000
+      EXECUTION_AUDIT_LOG: /data/audit.jsonl
+      CLOUDBOX_API_KEY: ${CLOUDBOX_API_KEY:?Set CLOUDBOX_API_KEY}
+      SHOPX_API_KEY: ${SHOPX_API_KEY:?Set SHOPX_API_KEY}
+    ports: ["127.0.0.1:9000:9000"]
+    volumes: [execution-data:/data]
+    depends_on:
+      cloudbox:
+        condition: service_healthy
+      shopx:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      # Authenticated lookup of a nonexistent proposal must return 404 (not 401).
+      test: [CMD, python, /app/docker/healthcheck.py, "http://127.0.0.1:9000/proposals/readiness", --status, "404", --service-key]
+
+  backend:
+    <<: *python
+    working_dir: /app/backend
+    command:
+      - sh
+      - -ec
+      - |
+        python manage.py migrate --noinput
+        python manage.py seed_demo
+        python manage.py seed_tenants
+        exec python manage.py runserver 0.0.0.0:8000 --noreload
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?Copy .env.example to .env first}
+      DEBUG: "True"
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      CSRF_TRUSTED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      DATABASE_URL: sqlite:////data/db.sqlite3
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Set DEMO_PASSWORD to at least 12 characters}
+      ORCHESTRATOR_ENABLED: "True"
+      ORCHESTRATOR_GATEWAY: mcp
+      EXECUTION_URL: http://execution:9000
+      EXECUTION_REPO_PATH: /app
+      EXECUTION_SECRET: ${EXECUTION_SECRET:?Set EXECUTION_SECRET}
+      EXECUTION_SERVICE_KEY: ${EXECUTION_SERVICE_KEY:?Set EXECUTION_SERVICE_KEY}
+      WIDGET_SECRETS: cloudbox=${CLOUDBOX_WIDGET_SECRET:?Set CLOUDBOX_WIDGET_SECRET},shopx=${SHOPX_WIDGET_SECRET:?Set SHOPX_WIDGET_SECRET}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-20}
+      LLM_TOTAL_DEADLINE_SEC: ${LLM_TOTAL_DEADLINE_SEC:-30}
+      LLM_MAX_CALLS_PER_MESSAGE: ${LLM_MAX_CALLS_PER_MESSAGE:-8}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-1500}
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: [backend-data:/data]
+    depends_on:
+      execution:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      start_period: 45s
+      test: [CMD, python, /app/docker/healthcheck.py, "http://127.0.0.1:8000/api/health/"]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/node.Dockerfile
+      args:
+        APP_DIR: frontend
+    init: true
+    command: [npm, run, dev, --, --host, 0.0.0.0, --port, "5173", --strictPort]
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports: ["127.0.0.1:5173:5173"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173/api/health/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  widget:
+    build:
+      context: .
+      dockerfile: docker/node.Dockerfile
+      args:
+        APP_DIR: widget
+    init: true
+    command:
+      - sh
+      - -ec
+      - |
+        npm exec -- vite build -c vite.loader.config.ts
+        exec npm exec -- vite --host 0.0.0.0 --port 5174 --strictPort
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports: ["127.0.0.1:5174:5174"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      test: [CMD, node, -e, "Promise.all(['/widget.js','/api/health/'].map(p=>fetch('http://127.0.0.1:5174'+p))).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))"]
+
+volumes:
+  backend-data:
+  cloudbox-data:
+  shopx-data:
+  execution-data:

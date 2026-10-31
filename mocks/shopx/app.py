@@ -11,7 +11,7 @@ from starlette.routing import Route
 from mocks.common import Auth, Database, body, error, portal_routes
 
 HERE = Path(__file__).parent
-DB = HERE / "shopx.sqlite3"
+DB = Path(os.environ.get("MOCK_DATA_DIR", HERE)) / "shopx.sqlite3"
 ORDER = "SELECT * FROM orders WHERE customer_id = ?"
 
 

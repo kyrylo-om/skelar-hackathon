@@ -1,0 +1,10 @@
+# Container DNS names; context files are resolved relative to this file.
+[cloudbox]
+base_url = "http://cloudbox:9201"
+api_key_env = "CLOUDBOX_API_KEY"
+context = "../mocks/cloudbox/context.md"
+
+[shopx]
+base_url = "http://shopx:9202"
+api_key_env = "SHOPX_API_KEY"
+context = "../mocks/shopx/context.md"

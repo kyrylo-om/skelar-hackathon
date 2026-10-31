@@ -1,4 +1,24 @@
-# Project
+# Cloud Support
+
+## Запуск усіх серверів
+
+З кореня репозиторію, за наявності Docker і Docker Compose:
+
+```bash
+cp .env.example .env
+docker compose up --build -d --wait
+```
+
+Копіюйте `.env.example` лише при першому налаштуванні; існуючий `.env` не перезаписуйте.
+Відкрийте [кабінет](http://127.0.0.1:5173) або
+[CloudBox із чатом](http://127.0.0.1:9201).
+Логін оператора — `operator`, пароль — `DEMO_PASSWORD` із `.env`.
+AI за замовчуванням — **mock**, дані зберігаються у Docker volumes.
+
+**[Повна інструкція Docker і локального запуску всіх шести серверів](docs/RUNNING.md)**:
+порти, логіни, логи, перезапуск, demo-сценарії та діагностика.
+
+## Початковий шаблон
 
 Django + React template.
 

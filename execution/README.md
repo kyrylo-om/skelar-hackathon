@@ -1,5 +1,11 @@
 # Execution server
 
+For Docker Compose or a complete local launch of all six servers, see
+[the shared startup guide](../docs/RUNNING.md).
+`SERVICE_HOST` controls the listening address (loopback by default).
+`EXECUTION_ALLOWED_HOSTS` is a comma-separated MCP Host allowlist; Compose explicitly adds
+`execution:9000` while preserving DNS rebinding protection.
+
 Our MCP server, and the only way from the support agent to a connected product. It knows nothing
 about any particular product: a product hands us an HTTP API, an API key and a text context
 (what it is, its support rules, its API, its database schema). An OpenAPI spec is never required,

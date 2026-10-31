@@ -11,7 +11,7 @@ from starlette.routing import Route
 from mocks.common import Auth, Database, body, error, portal_routes
 
 HERE = Path(__file__).parent
-DB = HERE / "cloudbox.sqlite3"
+DB = Path(os.environ.get("MOCK_DATA_DIR", HERE)) / "cloudbox.sqlite3"
 SUBSCRIPTION = """
     SELECT s.id, s.status, s.period_end, s.auto_renew, p.name AS plan, p.price, p.storage_gb
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id

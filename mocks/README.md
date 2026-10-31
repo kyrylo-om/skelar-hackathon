@@ -1,5 +1,11 @@
 # Mock products
 
+For Docker Compose or a complete local launch of all six servers, see
+[the shared startup guide](../docs/RUNNING.md).
+`SERVICE_HOST` controls the listening address (loopback by default).
+`MOCK_DATA_DIR` optionally moves SQLite files into an existing writable directory;
+Compose uses `/data` with a separate named volume for each product.
+
 Two fake products that play our customers' role. Each is only what a real product would hand
 us: an HTTP API, an API key and a text context. The [execution server](../execution/README.md)
 connects to them through [products.toml](../execution/products.toml). Each also has its own
