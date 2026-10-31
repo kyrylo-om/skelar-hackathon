@@ -6,6 +6,8 @@ __pycache__/
 .ruff_cache/
 db.sqlite3
 staticfiles/
+reports/
+backend/reports/
 
 # Env
 .env

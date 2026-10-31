@@ -175,12 +175,15 @@ def run_all(
     """Execute scenario suite, calculate statistics and stability."""
     results = []
 
-    # If mock mode, force mock LLM provider and patch execution server
+    # If mock mode, force mock LLM provider
     old_provider = getattr(settings, "LLM_PROVIDER", "mock")
     patches = []
     tmp_dir = None
     if mode == "mock":
         settings.LLM_PROVIDER = "mock"
+
+    # Ensure connected products have execution backend available
+    if not getattr(settings, "EXECUTION_SERVICE_KEY", None) or fake_client is not None:
         tmp_dir = Path(tempfile.mkdtemp())
         client = fake_client or make_fake_client(tmp_dir)
         p1, p2 = patch_execution(client)
