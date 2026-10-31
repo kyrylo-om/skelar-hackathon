@@ -120,3 +120,17 @@ test('an expired session sends the operator back to the login', async () => {
 
   await waitFor(() => expect(screen.getByText('Вхід для менеджерів')).toBeInTheDocument())
 })
+
+test('a failed CSRF check shows an error but keeps the operator signed in', async () => {
+  stubApi({
+    ...operatorRoutes,
+    'POST /reviews/9/decision/': () => json({ detail: 'CSRF Failed: bad origin' }, 403),
+  })
+  render(<App />)
+  fireEvent.click(screen.getByRole('button', { name: 'Оператор' }))
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Схвалити' }))
+
+  expect(await screen.findByText('CSRF Failed: bad origin')).toBeInTheDocument()
+  expect(screen.queryByText('Вхід для менеджерів')).not.toBeInTheDocument()
+})

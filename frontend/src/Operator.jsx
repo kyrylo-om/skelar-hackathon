@@ -30,10 +30,12 @@ export default function Operator({ onSessionExpired }) {
   // Until the operator picks a chat, show the first one that needs a human.
   const activeId = id ?? (chats.find((c) => c.status === 'needs_review') ?? chats[0])?.id ?? null
 
-  // A 403 means the session is gone or the user lost operator rights.
+  // A 403 means the session is gone or the user lost operator rights; a failed CSRF check is
+  // also a 403, but the session is fine, so only report it.
   const fail = useCallback(
     (err) => {
-      if (err instanceof ApiError && err.status === 403) onSessionExpired?.()
+      const csrf = String(err instanceof ApiError ? err.data?.detail : '').startsWith('CSRF')
+      if (err instanceof ApiError && err.status === 403 && !csrf) onSessionExpired?.()
       else setError(errorText(err))
     },
     [onSessionExpired],
