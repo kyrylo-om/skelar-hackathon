@@ -1,5 +1,7 @@
 # Backend integration handoff
 
+Source-audited feature documentation for all current backend behavior: [Cloud Support backend](features/cloud-support-backend/FEATURE.md).
+
 Implemented under `backend/apps/`, preserving the existing scaffold. This is synthetic billing only: no bank, refund provider or storage provisioning is called.
 
 ## Current verification status
