@@ -136,12 +136,17 @@ CHATS = [
 ]
 
 
+# One demo customer account per chat above, in the same order.
+CUSTOMER_USERNAMES = ["olena", "andrii", "iryna", "bohdan", "mariia"]
+
+
 class Command(BaseCommand):
     help = "Create demo chats and a manager account for the operator cabinet."
 
     def add_arguments(self, parser):
         parser.add_argument("--username", default="manager")
         parser.add_argument("--password", default="manager-demo-1")
+        parser.add_argument("--customer-password", default="customer-demo-1")
         parser.add_argument("--reset", action="store_true", help="Delete existing chats first")
 
     def handle(self, *args, **options):
@@ -160,8 +165,13 @@ class Command(BaseCommand):
             return
 
         now = timezone.now()
-        for item in CHATS:
+        for item, username in zip(CHATS, CUSTOMER_USERNAMES, strict=True):
+            customer, made = user_model.objects.get_or_create(username=username)
+            if made:
+                customer.set_password(options["customer_password"])
+                customer.save()
             chat = Chat.objects.create(
+                customer=customer,
                 customer_name=item["customer_name"],
                 subject=item["subject"],
                 priority=item["priority"],

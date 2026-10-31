@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ApiError, api } from './api/client'
 
-export default function Login({ onLogin }) {
+export default function Login({ role, onLogin }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -12,7 +12,7 @@ export default function Login({ onLogin }) {
     setBusy(true)
     setError('')
     try {
-      onLogin(await api.post('/auth/login/', { username, password }))
+      onLogin(await api.post('/auth/login/', { username, password, role }))
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.status === 429 ? 'Забагато спроб, спробуйте за хвилину' : err.data?.detail || 'Не вдалося увійти')
@@ -26,7 +26,7 @@ export default function Login({ onLogin }) {
 
   return (
     <form className="login" onSubmit={submit}>
-      <h2>Вхід для менеджерів</h2>
+      <h2>{role === 'operator' ? 'Вхід для менеджерів' : 'Вхід для клієнтів'}</h2>
       <input
         placeholder="Логін"
         autoComplete="username"

@@ -20,6 +20,32 @@ def add_message(chat: Chat, role: str, text: str) -> Message:
     return message
 
 
+def escalate(chat: Chat) -> None:
+    chat.status = Chat.Status.NEEDS_REVIEW
+    chat.save(update_fields=["status"])
+    _touch(chat)
+
+
+def chat_for_customer(user) -> Chat:
+    chat = user.chats.order_by("-updated_at").first()
+    if chat is None:
+        chat = Chat.objects.create(
+            customer=user,
+            customer_name=user.get_full_name() or user.get_username(),
+            subject="Нове звернення",
+        )
+    return chat
+
+
+def receive_customer_message(chat: Chat, text: str) -> Message:
+    message = add_message(chat, Message.Role.CUSTOMER, text)
+    if chat.status == Chat.Status.RESOLVED:
+        chat.status = Chat.Status.AI_HANDLING
+        chat.save(update_fields=["status"])
+    ports.run_pipeline(chat, message)
+    return message
+
+
 def open_review(chat: Chat, *, action: str, params: dict, risk: str, reason: str) -> ReviewItem:
     """Entry point for the agent pipeline: put an action in front of a human."""
     review = ReviewItem.objects.create(

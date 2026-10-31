@@ -170,3 +170,71 @@ class SupportApiTests(TestCase):
     def test_invalid_decision_is_rejected(self):
         self.login()
         assert self.decide("maybe").status_code == 400
+
+
+class CustomerChatTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+        cls.customer = user_model.objects.create_user("cust", password=PASSWORD)
+        cls.other = user_model.objects.create_user("other", password=PASSWORD)
+        cls.operator = user_model.objects.create_user("op", password=PASSWORD, is_staff=True)
+
+    def setUp(self):
+        cache.clear()
+
+    def post_json(self, name, data):
+        return self.client.post(reverse(name), data, content_type="application/json")
+
+    def test_customer_login_needs_customer_role(self):
+        ok = self.post_json("login", {"username": "cust", "password": PASSWORD, "role": "customer"})
+        assert ok.status_code == 200
+        assert ok.json() == {"username": "cust", "isOperator": False}
+        self.client.logout()
+        wrong = self.post_json(
+            "login", {"username": "op", "password": PASSWORD, "role": "customer"}
+        )
+        assert wrong.status_code == 403
+
+    def test_anonymous_cannot_use_my_chat(self):
+        assert self.client.get(reverse("my-chat")).status_code == 403
+        assert self.post_json("my-message", {"text": "hi"}).status_code == 403
+
+    def test_operator_cannot_use_my_chat(self):
+        self.client.force_login(self.operator)
+        assert self.client.get(reverse("my-chat")).status_code == 403
+
+    def test_chat_is_created_once_per_customer(self):
+        self.client.force_login(self.customer)
+        first = self.client.get(reverse("my-chat")).json()
+        second = self.client.get(reverse("my-chat")).json()
+        assert first["id"] == second["id"]
+        assert Chat.objects.filter(customer=self.customer).count() == 1
+
+    def test_message_is_saved_and_escalated(self):
+        self.client.force_login(self.customer)
+        response = self.post_json("my-message", {"text": "Де моя підписка?"})
+        assert response.status_code == 201
+        roles = [m["role"] for m in response.json()["messages"]]
+        assert roles == ["customer", "ai"]
+        assert response.json()["status"] == "needs_review"
+
+    def test_customer_never_sees_another_customers_chat(self):
+        self.client.force_login(self.other)
+        self.post_json("my-message", {"text": "секрет"})
+        self.client.force_login(self.customer)
+        data = self.client.get(reverse("my-chat")).json()
+        assert data["messages"] == []
+
+    def test_customer_response_hides_internals(self):
+        self.client.force_login(self.customer)
+        data = self.post_json("my-message", {"text": "привіт"}).json()
+        assert set(data) == {"id", "status", "messages"}
+
+    def test_customer_cannot_read_operator_endpoints(self):
+        self.client.force_login(self.customer)
+        assert self.client.get(reverse("chat-list")).status_code == 403
+
+    def test_empty_message_is_rejected(self):
+        self.client.force_login(self.customer)
+        assert self.post_json("my-message", {"text": "  "}).status_code == 400

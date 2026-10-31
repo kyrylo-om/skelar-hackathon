@@ -12,3 +12,8 @@ def is_operator(user) -> bool:
 class IsOperator(BasePermission):
     def has_permission(self, request, view):
         return is_operator(request.user)
+
+
+class IsCustomer(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and not is_operator(request.user)

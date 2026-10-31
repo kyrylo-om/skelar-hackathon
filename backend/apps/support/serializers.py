@@ -60,6 +60,16 @@ class AuditSerializer(serializers.ModelSerializer):
         fields = ["id", "actor", "event", "chat", "payload", "at"]
 
 
+class CustomerChatSerializer(serializers.ModelSerializer):
+    """What a customer may see: the conversation, never the trace or review internals."""
+
+    messages = MessageSerializer(many=True)
+
+    class Meta:
+        model = Chat
+        fields = ["id", "status", "messages"]
+
+
 class ReplyInput(serializers.Serializer):
     text = serializers.CharField(max_length=2000, trim_whitespace=True)
 
@@ -74,3 +84,4 @@ class DecisionInput(serializers.Serializer):
 class LoginInput(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128, trim_whitespace=False)
+    role = serializers.ChoiceField(choices=["operator", "customer"], default="operator")

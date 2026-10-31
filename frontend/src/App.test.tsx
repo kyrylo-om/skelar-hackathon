@@ -54,11 +54,53 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-test('customer chat is shown by default', () => {
+test('customer tab asks for a customer login when there is no session', () => {
   stubApi({ 'GET /health/': () => json({ status: 'ok' }) })
   render(<App />)
 
-  expect(screen.getByText('AI-підтримка · вирішує, а не просто відповідає')).toBeInTheDocument()
+  expect(screen.getByText('Вхід для клієнтів')).toBeInTheDocument()
+})
+
+const customerChat = {
+  id: 3,
+  status: 'ai_handling',
+  messages: [{ id: 1, role: 'ai', text: 'Вітаю! Чим допомогти?', at: '2026-10-31T11:00:00Z' }],
+}
+
+const customerRoutes: Routes = {
+  'GET /health/': () => json({ status: 'ok' }),
+  'GET /auth/me/': () => json({ username: 'olena', isOperator: false }),
+  'GET /my/chat/': () => json(customerChat),
+}
+
+test('signed in customer sees their chat from the API', async () => {
+  stubApi(customerRoutes)
+  render(<App />)
+
+  expect(await screen.findByText('Вітаю! Чим допомогти?')).toBeInTheDocument()
+})
+
+test('customer message is posted to the API', async () => {
+  const post = vi.fn(() =>
+    json({
+      ...customerChat,
+      status: 'needs_review',
+      messages: [
+        ...customerChat.messages,
+        { id: 2, role: 'customer', text: 'Поверніть гроші', at: '2026-10-31T11:01:00Z' },
+      ],
+    }),
+  )
+  stubApi({ ...customerRoutes, 'POST /my/chat/messages/': post })
+  render(<App />)
+
+  fireEvent.change(await screen.findByPlaceholderText('Напишіть повідомлення…'), {
+    target: { value: 'Поверніть гроші' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Надіслати' }))
+
+  expect(await screen.findByText('Ваш запит передано спеціалісту — відповідь прийде тут')).toBeInTheDocument()
+  expect(post).toHaveBeenCalled()
 })
 
 test('reviewer tab asks for a login when there is no session', async () => {

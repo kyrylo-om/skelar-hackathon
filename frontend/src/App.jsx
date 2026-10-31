@@ -32,7 +32,7 @@ export default function App() {
           <button className={role === 'reviewer' ? 'on' : ''} onClick={() => setRole('reviewer')}>
             Оператор
           </button>
-          {user && role === 'reviewer' && (
+          {user && (
             <button className="ghost" onClick={logout}>
               Вийти ({user.username})
             </button>
@@ -40,8 +40,18 @@ export default function App() {
         </nav>
       </header>
       <main>
-        {role === 'customer' && <Client />}
-        {role === 'reviewer' && (user ? <Operator onSessionExpired={() => setUser(null)} /> : <Login onLogin={setUser} />)}
+        {role === 'customer' &&
+          (user && !user.isOperator ? (
+            <Client onSessionExpired={() => setUser(null)} />
+          ) : (
+            <Login key="customer" role="customer" onLogin={setUser} />
+          ))}
+        {role === 'reviewer' &&
+          (user?.isOperator ? (
+            <Operator onSessionExpired={() => setUser(null)} />
+          ) : (
+            <Login key="operator" role="operator" onLogin={setUser} />
+          ))}
       </main>
     </div>
   )

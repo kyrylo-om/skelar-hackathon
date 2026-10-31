@@ -9,11 +9,12 @@ from rest_framework.views import APIView
 
 from . import ports, services
 from .models import AuditLog, Chat, ReviewItem
-from .permissions import IsOperator, is_operator
+from .permissions import IsCustomer, IsOperator, is_operator
 from .serializers import (
     AuditSerializer,
     ChatDetailSerializer,
     ChatListSerializer,
+    CustomerChatSerializer,
     DecisionInput,
     LoginInput,
     ReplyInput,
@@ -42,8 +43,10 @@ def login_view(request):
     )
     if user is None:
         return Response({"detail": "Невірний логін або пароль"}, status=status.HTTP_400_BAD_REQUEST)
-    if not is_operator(user):
-        return Response({"detail": "Немає доступу до кабінету"}, status=status.HTTP_403_FORBIDDEN)
+    wants_operator = data.validated_data["role"] == "operator"
+    if is_operator(user) != wants_operator:
+        detail = "Немає доступу до кабінету" if wants_operator else "Це акаунт менеджера"
+        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
     login(request, user)
     return Response(_user_payload(user))
 
@@ -56,9 +59,29 @@ def logout_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsOperator])
+@permission_classes([IsAuthenticated])
 def me_view(request):
     return Response(_user_payload(request.user))
+
+
+class MyChatView(APIView):
+    permission_classes = [IsCustomer]
+
+    def get(self, request):
+        chat = services.chat_for_customer(request.user)
+        return Response(CustomerChatSerializer(chat).data)
+
+
+class MyMessageView(APIView):
+    permission_classes = [IsCustomer]
+
+    def post(self, request):
+        data = ReplyInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        chat = services.chat_for_customer(request.user)
+        services.receive_customer_message(chat, data.validated_data["text"])
+        chat.refresh_from_db()
+        return Response(CustomerChatSerializer(chat).data, status=status.HTTP_201_CREATED)
 
 
 def _detail_queryset():

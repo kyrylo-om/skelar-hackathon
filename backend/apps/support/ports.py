@@ -11,3 +11,18 @@ class ExecutionError(Exception):
 
 def execute(action: str, params: dict) -> None:
     return None
+
+
+def run_pipeline(chat, message) -> None:
+    """Handle a new customer message. Replaced by the agent pipeline.
+
+    Until it exists, hand the conversation to a human so nothing is lost.
+    """
+    from . import services
+
+    services.add_message(
+        chat,
+        "ai",
+        "Дякуємо за звернення! Ваш запит передано спеціалісту, він відповість у цьому чаті.",
+    )
+    services.escalate(chat)
