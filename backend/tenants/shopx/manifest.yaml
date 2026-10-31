@@ -1,0 +1,38 @@
+tenant: shopx
+name: ShopX
+policies:
+  rate_limit_per_hour: 5
+  idempotency_window_sec: 120
+  review_vip: true
+rules:
+  - match: "POST /orders/{number}/cancel"
+    risk: medium
+    summary: "Скасувати замовлення {number}"
+    requires:
+      - read: "GET /orders"
+        where:
+          number: "{number}"
+        field: status
+        in: [processing]
+  - match: "PATCH /orders/{number}/address"
+    risk: medium
+    summary: "Змінити адресу замовлення {number} на {address}"
+    requires:
+      - read: "GET /orders"
+        where:
+          number: "{number}"
+        field: status
+        in: [processing]
+  - match: "POST /orders/{number}/refund"
+    risk: high
+    summary: "Повернути {amount} грн за замовлення {number}"
+    limits:
+      amount_param: amount
+      auto_max: 200
+      hard_max: 3000
+    requires:
+      - read: "GET /orders"
+        where:
+          number: "{number}"
+        field: status
+        in: [delivered]

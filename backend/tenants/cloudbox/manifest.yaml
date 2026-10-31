@@ -1,0 +1,40 @@
+tenant: cloudbox
+name: CloudBox
+policies:
+  rate_limit_per_hour: 5
+  idempotency_window_sec: 120
+  review_vip: true
+rules:
+  - match: "POST /subscription/sync"
+    risk: medium
+    summary: "Активувати підписку за платежем {payment_id}"
+    requires:
+      - read: "GET /payments"
+        where:
+          id: "{payment_id}"
+        field: status
+        in: [successful]
+      - read: "GET /payments"
+        where:
+          id: "{payment_id}"
+        field: applied_at
+        empty: true
+  - match: "POST /subscription/auto-renewal/off"
+    risk: low
+    summary: "Вимкнути автопродовження підписки"
+  - match: "POST /subscription/auto-renewal/on"
+    risk: low
+    summary: "Увімкнути автопродовження підписки"
+  - match: "POST /payments/{payment_id}/refund"
+    risk: high
+    summary: "Повернути {amount} грн за платіж {payment_id}"
+    limits:
+      amount_param: amount
+      auto_max: 50
+      hard_max: 1000
+    requires:
+      - read: "GET /payments"
+        where:
+          id: "{payment_id}"
+        field: status
+        in: [successful]

@@ -101,10 +101,7 @@ apps/review  receive_customer_message ─► ports.run_pipeline
 перевіркою Policy, перевірка плану, маніфест, безпечність відповіді. Усі працюють на mock без мережі.
 
 ## Чого ще немає **[узгодити]**
-1. **MCP.** `ORCHESTRATOR_GATEWAY=mcp` вмикає `McpGateway` (`mcp_gateway.py`): факти й дії йдуть через наш
-   сервер виконання (`execution/`) до зовнішнього продукту (мок `mocks/cloudbox`). Дія спершу пропонується й
-   виконується лише після Gate або кнопки клієнта; деталі в `execution/README.md`. Лишилось: мапінг дій на виклики
-   API (`CALLS`) і полів фактів зараз написаний для CloudBox у коді, а не в маніфесті (`executor`, `entities`).
+1. **MCP / Tenant Agent.** Підключено через шар `apps.tenants` (див. `11_TENANT_AGENT.md`): агент читає API продукту, дії проходять Gate, виконання через execution client. Також є `ORCHESTRATOR_GATEWAY=mcp` (`mcp_gateway.py`) для фіксованого шлюзу. Користувачі без `TenantCustomer` продовжують обслуговуватись через dev-домен.
 2. **Підтримані дії.** Шлюз знає `get_subscription`, `get_payments`, `sync_subscription`, `cancel_auto_renewal`. Повернення,
    пауза тощо потребують підтримки продукту; їх схвалення людиною зараз закінчується `ExecutionError`.
 3. **Маніфест у YAML/БД** замість Python-структури, і читання реєстру дій Policy з нього.

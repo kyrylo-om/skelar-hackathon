@@ -24,8 +24,13 @@ import httpx2
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from mcp import Client
-from mcp.client.streamable_http import streamable_http_client
+
+try:
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+except (ImportError, ModuleNotFoundError):
+    Client = None
+    streamable_http_client = None
 from rest_framework.exceptions import NotFound
 
 from apps.core.errors import Conflict
@@ -77,6 +82,9 @@ class ExecutionClient:
         return self._http("POST", f"/proposals/{proposal_id}/execute")
 
     def _tool(self, token: str, name: str, args: dict) -> dict:
+        if Client is None or streamable_http_client is None:
+            raise ProductUnavailable("mcp package is not installed")
+
         async def call():
             async with httpx2.AsyncClient(headers={TOKEN_HEADER: token}, timeout=15) as http:
                 transport = streamable_http_client(f"{self.url}/mcp", http_client=http)
